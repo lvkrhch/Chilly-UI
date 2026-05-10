@@ -7,12 +7,14 @@ end)
 
 local Window = Chilly:CreateWindow({
     Name = "Chilly by Khai",
-    LoadingTitle = "Chilly",
-    LoadingSubtitle = "deep blue executor UI",
+    Icon = "snowflake",
+    LoadingTitle = "Chilly Interface Suite",
+    LoadingSubtitle = "by Khai",
     ShowText = "Chilly",
     Theme = "Chilly",
     ToggleUIKeybind = "K",
     DisableLoadingAnimation = false,
+    LoadingDuration = 2.2,
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "Chilly",
@@ -35,7 +37,7 @@ local Window = Chilly:CreateWindow({
 })
 
 local Main = Window:CreateTab("Main", "home")
-local Player = Window:CreateTab("Player", "user")
+local Player = Window:CreateTab("Player", "user-round")
 local Settings = Window:CreateTab("Settings", "settings")
 
 Main:CreateSection("Basic")
@@ -179,7 +181,7 @@ Player:CreateKeybind({
 
 Settings:CreateSection("Information")
 
-local Status = Settings:CreateLabel("Status: ready")
+local Status = Settings:CreateLabel("Status: ready", "badge-check")
 
 Settings:CreateParagraph({
     Title = "About",
