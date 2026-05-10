@@ -1,0 +1,307 @@
+-- Chilly lightweight debug visual test
+-- Authorized use only. This shows simple player tags/highlights without through-wall rendering.
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local UI_URL = "https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Chilly%20UI"
+local ASSETS_URL = "https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Assets"
+
+local function safeLoad(url, name)
+    local ok, source = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok or type(source) ~= "string" then
+        warn("[Chilly Debug] Failed to download " .. name .. ": " .. tostring(source))
+        return nil
+    end
+
+    local chunk, compileError = loadstring(source)
+    if not chunk then
+        warn("[Chilly Debug] Failed to compile " .. name .. ": " .. tostring(compileError))
+        return nil
+    end
+
+    local ran, result = pcall(chunk)
+    if not ran then
+        warn("[Chilly Debug] Failed to run " .. name .. ": " .. tostring(result))
+        return nil
+    end
+
+    return result
+end
+
+local Chilly = safeLoad(UI_URL, "Chilly UI")
+if type(Chilly) ~= "table" then
+    return
+end
+
+local Assets = safeLoad(ASSETS_URL, "Assets")
+if type(Assets) == "table" and type(Chilly.LoadAssets) == "function" then
+    Chilly:LoadAssets(Assets)
+end
+
+if type(Chilly.InstallRayfieldAlias) == "function" then
+    Chilly:InstallRayfieldAlias()
+end
+
+local Window = (Chilly.CreateProfessionalWindow and Chilly:CreateProfessionalWindow({
+    Name = "Chilly Debug Visual",
+    Icon = "eye",
+    LoadingTitle = "Chilly",
+    LoadingSubtitle = "Debug visual ready",
+    ShowText = "Chilly",
+    ToggleUIKeybind = "K",
+}) or Chilly:CreateWindow({
+    Name = "Chilly Debug Visual",
+    Icon = "eye",
+    LoadingTitle = "Chilly",
+    LoadingSubtitle = "Debug visual ready",
+    ShowText = "Chilly",
+    ToggleUIKeybind = "K",
+}))
+
+local VisualTab = Window:CreateTab("Visual Test", "eye")
+local SettingsTab = Window:CreateTab("Settings", "settings")
+
+local enabled = false
+local showNames = true
+local showDistance = true
+local maxDistance = 350
+local updateRate = 0.12
+local fillTransparency = 0.82
+local outlineTransparency = 0.1
+local debugColor = Color3.fromRGB(75, 162, 255)
+
+local objects = {}
+local accumulator = 0
+
+local function getRoot(character)
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function removeVisual(player)
+    local data = objects[player]
+    if not data then
+        return
+    end
+    if data.Highlight then
+        data.Highlight:Destroy()
+    end
+    if data.Billboard then
+        data.Billboard:Destroy()
+    end
+    objects[player] = nil
+end
+
+local function createVisual(player)
+    if player == LocalPlayer then
+        return nil
+    end
+
+    local character = player.Character
+    local root = getRoot(character)
+    if not character or not root then
+        return nil
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ChillyDebugHighlight"
+    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+    highlight.FillColor = debugColor
+    highlight.OutlineColor = Color3.fromRGB(241, 247, 255)
+    highlight.FillTransparency = fillTransparency
+    highlight.OutlineTransparency = outlineTransparency
+    highlight.Adornee = character
+    highlight.Parent = character
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ChillyDebugTag"
+    billboard.Adornee = root
+    billboard.AlwaysOnTop = false
+    billboard.LightInfluence = 0.4
+    billboard.MaxDistance = maxDistance
+    billboard.Size = UDim2.new(0, 150, 0, 32)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Parent = root
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.GothamSemibold
+    label.TextColor3 = Color3.fromRGB(241, 247, 255)
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0.35
+    label.TextSize = 12
+    label.Text = player.DisplayName
+    label.Parent = billboard
+
+    objects[player] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        Label = label,
+    }
+    return objects[player]
+end
+
+local function updateVisual(player)
+    if player == LocalPlayer then
+        return
+    end
+
+    local character = player.Character
+    local root = getRoot(character)
+    local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not enabled or not character or not root or not localRoot then
+        removeVisual(player)
+        return
+    end
+
+    local distance = (root.Position - localRoot.Position).Magnitude
+    if distance > maxDistance then
+        removeVisual(player)
+        return
+    end
+
+    local data = objects[player] or createVisual(player)
+    if not data then
+        return
+    end
+
+    data.Highlight.Adornee = character
+    data.Highlight.FillColor = debugColor
+    data.Highlight.FillTransparency = fillTransparency
+    data.Highlight.OutlineTransparency = outlineTransparency
+    data.Billboard.Adornee = root
+    data.Billboard.MaxDistance = maxDistance
+
+    local text = ""
+    if showNames then
+        text = player.DisplayName
+    end
+    if showDistance then
+        text = text .. (text == "" and "" or "  ") .. tostring(math.floor(distance + 0.5)) .. "m"
+    end
+    data.Label.Text = text ~= "" and text or " "
+end
+
+local function clearAll()
+    for player in pairs(objects) do
+        removeVisual(player)
+    end
+end
+
+VisualTab:CreateToggle({
+    Name = "Enable Debug Visual",
+    CurrentValue = false,
+    Flag = "Chilly_DebugVisual_Enabled",
+    Callback = function(value)
+        enabled = value == true
+        if not enabled then
+            clearAll()
+        end
+    end,
+})
+
+VisualTab:CreateToggle({
+    Name = "Show Names",
+    CurrentValue = true,
+    Flag = "Chilly_DebugVisual_Names",
+    Callback = function(value)
+        showNames = value == true
+    end,
+})
+
+VisualTab:CreateToggle({
+    Name = "Show Distance",
+    CurrentValue = true,
+    Flag = "Chilly_DebugVisual_Distance",
+    Callback = function(value)
+        showDistance = value == true
+    end,
+})
+
+SettingsTab:CreateSlider({
+    Name = "Max Distance",
+    Range = {50, 1000},
+    Increment = 25,
+    CurrentValue = maxDistance,
+    Suffix = "m",
+    Flag = "Chilly_DebugVisual_MaxDistance",
+    Callback = function(value)
+        maxDistance = value
+    end,
+})
+
+SettingsTab:CreateSlider({
+    Name = "Update Rate",
+    Range = {0.05, 0.5},
+    Increment = 0.01,
+    CurrentValue = updateRate,
+    Suffix = "s",
+    Flag = "Chilly_DebugVisual_UpdateRate",
+    Callback = function(value)
+        updateRate = value
+    end,
+})
+
+SettingsTab:CreateSlider({
+    Name = "Fill Transparency",
+    Range = {0.5, 1},
+    Increment = 0.01,
+    CurrentValue = fillTransparency,
+    Flag = "Chilly_DebugVisual_FillTransparency",
+    Callback = function(value)
+        fillTransparency = value
+    end,
+})
+
+SettingsTab:CreateSlider({
+    Name = "Outline Transparency",
+    Range = {0, 1},
+    Increment = 0.01,
+    CurrentValue = outlineTransparency,
+    Flag = "Chilly_DebugVisual_OutlineTransparency",
+    Callback = function(value)
+        outlineTransparency = value
+    end,
+})
+
+SettingsTab:CreateButton({
+    Name = "Clear Visuals",
+    Callback = clearAll,
+})
+
+Players.PlayerRemoving:Connect(removeVisual)
+
+RunService.RenderStepped:Connect(function(delta)
+    if not enabled then
+        return
+    end
+
+    accumulator += delta
+    if accumulator < updateRate then
+        return
+    end
+    accumulator = 0
+
+    Camera = workspace.CurrentCamera or Camera
+    for _, player in ipairs(Players:GetPlayers()) do
+        updateVisual(player)
+    end
+end)
+
+Chilly:Notify({
+    Title = "Chilly",
+    Content = "Debug visual test loaded.",
+    Duration = 4,
+    Image = "eye",
+})
