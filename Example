@@ -1,4 +1,4 @@
-local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Chilly%20UI"))()
+local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Chilly%20UI"))()
 
 local Window = Chilly:CreateWindow({
     Name = "Chilly by Khai",
