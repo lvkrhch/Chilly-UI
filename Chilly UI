@@ -89,13 +89,27 @@ local function normalizeKey(key)
 end
 
 local function getParent()
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not playerGui and LocalPlayer then
+        playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    end
+
     local ok, coreGui = pcall(function()
         return game:GetService("CoreGui")
     end)
     if ok and coreGui then
-        return coreGui
+        local probe = Instance.new("ScreenGui")
+        probe.Name = "ChillyParentProbe"
+        local canUseCoreGui = pcall(function()
+            probe.Parent = coreGui
+        end)
+        probe:Destroy()
+        if canUseCoreGui then
+            return coreGui
+        end
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+
+    return playerGui
 end
 
 local function executorSupportsFile()
