@@ -1,0 +1,65 @@
+-- Chilly by Khai asset pack
+-- Lightweight local asset definitions. No runtime cache, no remote image dependency.
+
+return {
+    Name = "ChillyAssets",
+    Version = "1.0.0",
+
+    LogoText = "CK",
+
+    Icons = {
+        home = "H",
+        settings = "S",
+        user = "U",
+        shield = "#",
+        target = "+",
+        bolt = "*",
+        search = "?",
+        palette = "P",
+        keyboard = "K",
+        info = "i",
+        warning = "!",
+        check = "v",
+        close = "x",
+        copy = "C",
+        save = "D",
+        refresh = "R",
+        eye = "O",
+        eyeoff = "-",
+        terminal = ">",
+        sliders = "=",
+        list = "L",
+        bell = "B",
+        folder = "F",
+        player = "P",
+        combat = "X",
+        world = "W",
+        visual = "V",
+    },
+
+    ThemeTokens = {
+        RadiusSmall = 6,
+        Radius = 8,
+        RadiusLarge = 14,
+        ElementHeight = 52,
+        SidebarWidth = 176,
+        TopbarHeight = 54,
+        Padding = 14,
+    },
+
+    RobloxImages = {
+        -- Fill these with your own uploaded Roblox decals if you want image icons.
+        Logo = "",
+        Home = "",
+        Settings = "",
+        User = "",
+        Bell = "",
+    },
+
+    Sounds = {
+        -- Optional sound asset ids. Empty by default so the library stays silent and fast.
+        Open = "",
+        Click = "",
+        Notify = "",
+    },
+}
