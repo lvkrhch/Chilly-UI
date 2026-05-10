@@ -13,7 +13,7 @@ local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 
 local UI_URL = "https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Chilly%20UI"
-local ASSETS_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/Chilly_Assets_Enhanced.lua"
+local ASSETS_URL = "https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Assets"
 
 local Chilly = loadstring(game:HttpGet(UI_URL))()
 local Assets = loadstring(game:HttpGet(ASSETS_URL))()
