@@ -1,37 +1,47 @@
--- Chilly by Khai asset pack
--- Lightweight local asset definitions. No runtime cache, no remote image dependency.
+-- Chilly enhanced asset pack
+-- Image-backed icons use the same Lucide module strategy commonly used by Rayfield-style UI libraries.
 
 return {
-    Name = "ChillyAssets",
-    Version = "1.0.0",
+    Name = "ChillyAssetsEnhanced",
+    Version = "2.0.0",
 
-    LogoText = "CK",
+    LogoText = "CH",
     UseImages = true,
     LucideModel = 15279939717,
 
-    -- Optional direct image overrides. Values can be Roblox image IDs, or full
-    -- atlas records: {Id = 123, ImageRectOffset = Vector2.new(...), ImageRectSize = Vector2.new(...)}.
     Images = {
-        -- logo = 0,
+        -- Optional uploaded Roblox decals can be placed here.
+        -- Example: logo = 1234567890
     },
 
     Icons = {
         home = "home",
+        dashboard = "layout-dashboard",
         settings = "settings",
-        user = "user",
+        config = "database",
+        user = "user-round",
+        users = "users",
         shield = "shield",
-        target = "target",
-        bolt = "zap",
-        search = "search",
+        target = "crosshair",
+        movement = "move-3d",
+        visual = "scan-eye",
+        autoclick = "mouse-pointer-click",
+        extra = "sparkles",
+        world = "globe-2",
+        performance = "gauge",
+        theme = "paintbrush",
         palette = "palette",
         keyboard = "keyboard",
+        key = "key-round",
         info = "info",
         warning = "triangle-alert",
+        success = "badge-check",
         check = "check",
         close = "x",
         copy = "copy",
         save = "save",
         refresh = "refresh-cw",
+        search = "search",
         eye = "eye",
         eyeoff = "eye-off",
         terminal = "terminal",
@@ -39,10 +49,18 @@ return {
         list = "list",
         bell = "bell",
         folder = "folder",
-        player = "user-round",
-        combat = "swords",
-        world = "globe-2",
-        visual = "scan-eye",
+        play = "play",
+        pause = "pause",
+        stop = "square",
+        plus = "plus",
+        minus = "minus",
+        maximize = "maximize-2",
+        minimize = "minimize-2",
+        loader = "loader-circle",
+        code = "code",
+        bug = "bug",
+        wrench = "wrench",
+        rocket = "rocket",
     },
 
     ThemeTokens = {
@@ -53,19 +71,10 @@ return {
         SidebarWidth = 176,
         TopbarHeight = 54,
         Padding = 14,
-    },
-
-    RobloxImages = {
-        -- Fill these with your own uploaded Roblox decals if you want image icons.
-        Logo = "",
-        Home = "",
-        Settings = "",
-        User = "",
-        Bell = "",
+        LoadingDuration = 1.85,
     },
 
     Sounds = {
-        -- Optional sound asset ids. Empty by default so the library stays silent and fast.
         Open = "",
         Click = "",
         Notify = "",
