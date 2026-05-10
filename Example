@@ -1,5 +1,10 @@
 local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Chilly%20UI"))()
 
+pcall(function()
+    local Assets = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/ChillyAssets.lua"))()
+    Chilly:LoadAssets(Assets)
+end)
+
 local Window = Chilly:CreateWindow({
     Name = "Chilly by Khai",
     LoadingTitle = "Chilly",
@@ -7,6 +12,7 @@ local Window = Chilly:CreateWindow({
     ShowText = "Chilly",
     Theme = "Chilly",
     ToggleUIKeybind = "K",
+    DisableLoadingAnimation = false,
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "Chilly",
@@ -34,6 +40,12 @@ local Settings = Window:CreateTab("Settings", "settings")
 
 Main:CreateSection("Basic")
 
+Main:CreateProgress({
+    Name = "Boot Quality",
+    Range = {0, 100},
+    CurrentValue = 92,
+})
+
 Main:CreateButton({
     Name = "Say Hello",
     Callback = function()
@@ -43,6 +55,32 @@ Main:CreateButton({
             Duration = 4,
         })
     end,
+})
+
+Main:CreateActionRow({
+    Name = "Quick Tools",
+    Actions = {
+        {
+            Name = "Notify",
+            Primary = true,
+            Callback = function()
+                Chilly:Notify({
+                    Title = "Professional",
+                    Content = "Action row works cleanly.",
+                    Duration = 3,
+                    Actions = {
+                        {Name = "OK", Callback = function() print("OK") end},
+                    },
+                })
+            end,
+        },
+        {
+            Name = "Print",
+            Callback = function()
+                print("Chilly action row clicked")
+            end,
+        },
+    },
 })
 
 Main:CreateToggle({
@@ -146,6 +184,11 @@ local Status = Settings:CreateLabel("Status: ready")
 Settings:CreateParagraph({
     Title = "About",
     Content = "Chilly by Khai is a deep-blue macOS-style Roblox UI library with a Rayfield-style API.",
+})
+
+Settings:CreateCode({
+    Height = 110,
+    Code = "print('Chilly by Khai')\n-- Toggle UI: K\n-- Clean layer, no screen-blocking shadow",
 })
 
 Settings:CreateDivider()
