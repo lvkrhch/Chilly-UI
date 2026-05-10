@@ -48,6 +48,27 @@ local function make(className, properties, children)
     return instance
 end
 
+local function setZIndexTree(instance, zIndex)
+    if instance:IsA("GuiObject") then
+        instance.ZIndex = zIndex
+    end
+    for _, child in ipairs(instance:GetDescendants()) do
+        if child:IsA("GuiObject") then
+            child.ZIndex = zIndex
+        end
+    end
+end
+
+local function bindClick(button, callback)
+    if button:IsA("GuiButton") then
+        button.Active = true
+        button.AutoButtonColor = false
+    end
+    button.MouseButton1Click:Connect(function()
+        safeCall(callback)
+    end)
+end
+
 local function corner(radius)
     return make("UICorner", {CornerRadius = UDim.new(0, radius or 8)})
 end
@@ -162,13 +183,33 @@ Chilly.Themes.Chilly = {
     Accent = Color3.fromRGB(85, 158, 255),
     AccentSoft = Color3.fromRGB(24, 68, 125),
     AccentSecond = Color3.fromRGB(70, 220, 190),
+    TabBackground = Color3.fromRGB(11, 23, 43),
+    TabStroke = Color3.fromRGB(40, 70, 112),
+    TabBackgroundSelected = Color3.fromRGB(24, 68, 125),
+    TabTextColor = Color3.fromRGB(143, 161, 188),
+    SelectedTabTextColor = Color3.fromRGB(234, 242, 255),
     ElementBackground = Color3.fromRGB(15, 29, 54),
     ElementBackgroundHover = Color3.fromRGB(20, 40, 74),
     SecondaryElementBackground = Color3.fromRGB(9, 18, 35),
     ElementStroke = Color3.fromRGB(40, 70, 112),
+    SecondaryElementStroke = Color3.fromRGB(25, 47, 78),
+    SliderBackground = Color3.fromRGB(12, 26, 49),
+    SliderProgress = Color3.fromRGB(85, 158, 255),
+    SliderStroke = Color3.fromRGB(115, 181, 255),
+    ToggleBackground = Color3.fromRGB(11, 24, 45),
+    ToggleEnabled = Color3.fromRGB(85, 158, 255),
+    ToggleDisabled = Color3.fromRGB(67, 82, 105),
+    ToggleEnabledStroke = Color3.fromRGB(115, 181, 255),
+    ToggleDisabledStroke = Color3.fromRGB(86, 102, 126),
+    ToggleEnabledOuterStroke = Color3.fromRGB(32, 78, 135),
+    ToggleDisabledOuterStroke = Color3.fromRGB(32, 47, 68),
+    DropdownSelected = Color3.fromRGB(24, 68, 125),
+    DropdownUnselected = Color3.fromRGB(15, 29, 54),
     InputBackground = Color3.fromRGB(7, 16, 31),
+    InputStroke = Color3.fromRGB(40, 70, 112),
     PlaceholderColor = Color3.fromRGB(101, 121, 151),
     NotificationBackground = Color3.fromRGB(11, 23, 43),
+    NotificationActionsBackground = Color3.fromRGB(15, 29, 54),
     Danger = Color3.fromRGB(255, 94, 94),
     Warning = Color3.fromRGB(255, 190, 87),
     Success = Color3.fromRGB(69, 220, 153),
@@ -189,6 +230,49 @@ Chilly.Themes.Ocean = deepMerge(Chilly.Themes.Chilly, {
     Accent = Color3.fromRGB(58, 198, 255),
     AccentSecond = Color3.fromRGB(92, 232, 187),
 })
+
+Chilly.Assets = {
+    LogoText = "CK",
+    Icons = {
+        home = "H",
+        settings = "S",
+        user = "U",
+        shield = "#",
+        target = "+",
+        bolt = "*",
+        search = "?",
+        palette = "P",
+        keyboard = "K",
+        info = "i",
+        warning = "!",
+        check = "v",
+        close = "x",
+        copy = "C",
+        save = "D",
+        refresh = "R",
+        eye = "O",
+        eyeoff = "-",
+        terminal = ">",
+        sliders = "=",
+        list = "L",
+        bell = "B",
+    },
+    Sounds = {
+        Open = "",
+        Click = "",
+        Notify = "",
+    },
+}
+
+local function iconText(icon)
+    if icon == nil or icon == 0 then
+        return ""
+    end
+    if type(icon) == "number" then
+        return ""
+    end
+    return Chilly.Assets.Icons[string.lower(tostring(icon))] or string.sub(tostring(icon), 1, 1)
+end
 
 local Window = {}
 Window.__index = Window
@@ -256,6 +340,38 @@ function Chilly:LoadConfiguration()
     end
 end
 
+function Chilly:LoadAssets(assetPack)
+    if type(assetPack) ~= "table" then
+        return self.Assets
+    end
+    if type(assetPack.Icons) == "table" then
+        for key, value in pairs(assetPack.Icons) do
+            self.Assets.Icons[key] = value
+        end
+    end
+    if assetPack.LogoText then
+        self.Assets.LogoText = assetPack.LogoText
+    end
+    if type(assetPack.Sounds) == "table" then
+        for key, value in pairs(assetPack.Sounds) do
+            self.Assets.Sounds[key] = value
+        end
+    end
+    return self.Assets
+end
+
+function Chilly:GetFlag(flag)
+    return self.Flags[flag]
+end
+
+function Chilly:SetFlag(flag, value)
+    self.Flags[flag] = value
+    local active = self.ActiveWindow
+    if active then
+        active:SaveConfiguration()
+    end
+end
+
 function Chilly:SetVisibility(visible)
     local active = self.ActiveWindow
     if active then
@@ -301,9 +417,11 @@ function Chilly:Notify(options)
         })
     end
 
+    local hasActions = type(options.Actions) == "table" and #options.Actions > 0
+    local toastHeight = hasActions and 124 or 88
     local toast = make("Frame", {
         Name = "Toast",
-        Size = UDim2.new(1, 0, 0, 88),
+        Size = UDim2.new(1, 0, 0, toastHeight),
         BackgroundColor3 = theme.NotificationBackground,
         BackgroundTransparency = 0.04,
         ClipsDescendants = true,
@@ -327,7 +445,7 @@ function Chilly:Notify(options)
 
     make("TextLabel", {
         Position = UDim2.new(0, 0, 0, 28),
-        Size = UDim2.new(1, 0, 0, 38),
+        Size = UDim2.new(1, 0, 0, hasActions and 34 or 38),
         BackgroundTransparency = 1,
         Font = Enum.Font.Gotham,
         Text = options.Content or "",
@@ -338,6 +456,41 @@ function Chilly:Notify(options)
         TextYAlignment = Enum.TextYAlignment.Top,
         Parent = toast,
     })
+
+    if hasActions then
+        local actionRow = make("Frame", {
+            Position = UDim2.new(0, 0, 1, -30),
+            Size = UDim2.new(1, 0, 0, 28),
+            BackgroundTransparency = 1,
+            Parent = toast,
+        }, {
+            make("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                Padding = UDim.new(0, 8),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            }),
+        })
+        for _, action in ipairs(options.Actions) do
+            local actionButton = make("TextButton", {
+                Size = UDim2.new(0, math.clamp(string.len(tostring(action.Name or "Action")) * 8 + 24, 76, 132), 1, 0),
+                BackgroundColor3 = theme.NotificationActionsBackground,
+                Font = Enum.Font.GothamSemibold,
+                Text = tostring(action.Name or "Action"),
+                TextColor3 = theme.TextColor,
+                TextSize = 12,
+                Active = true,
+                AutoButtonColor = false,
+                Parent = actionRow,
+            }, {
+                corner(7),
+                stroke(theme.ElementStroke, 1, 0.35),
+            })
+            bindClick(actionButton, function()
+                safeCall(action.Callback)
+            end)
+        end
+    end
 
     local close = make("TextButton", {
         AnchorPoint = Vector2.new(1, 0),
@@ -536,31 +689,43 @@ function Chilly:CreateWindow(options)
         Parent = getParent(),
     })
 
-    local root = make("Frame", {
-        Name = "Window",
+    local container = make("Frame", {
+        Name = "WindowContainer",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.new(0.5, 0, 0.5, 0),
         Size = options.Size or UDim2.new(0, 680, 0, 460),
-        BackgroundColor3 = theme.Background,
-        ClipsDescendants = true,
+        BackgroundTransparency = 1,
+        Active = false,
         Parent = gui,
-    }, {
-        corner(14),
-        stroke(theme.ElementStroke, 1, 0),
     })
 
     local shadow = make("Frame", {
         Name = "Shadow",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.new(0.5, 0, 0.5, 8),
-        Size = UDim2.new(1, 28, 1, 28),
+        Position = UDim2.new(0, 0, 0, 10),
+        Size = UDim2.new(1, 0, 1, 0),
         BackgroundColor3 = theme.Shadow,
-        BackgroundTransparency = 0.55,
-        ZIndex = 0,
-        Parent = root,
-    }, {corner(18)})
-    shadow.Parent = gui
-    root.ZIndex = 2
+        BackgroundTransparency = 0.64,
+        Active = false,
+        ZIndex = 1,
+        Parent = container,
+    }, {
+        corner(18),
+    })
+
+    local root = make("Frame", {
+        Name = "Window",
+        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = theme.Background,
+        ClipsDescendants = true,
+        Active = true,
+        ZIndex = 2,
+        Parent = container,
+    }, {
+        corner(14),
+        stroke(theme.ElementStroke, 1, 0),
+    })
+    setZIndexTree(root, 2)
 
     local topbar = make("Frame", {
         Name = "Topbar",
@@ -587,15 +752,23 @@ function Chilly:CreateWindow(options)
         {Color = Color3.fromRGB(39, 201, 63), X = 70, Text = ""},
     }
     for index, item in ipairs(traffic) do
-        make("TextButton", {
+        local trafficButton = make("TextButton", {
             Name = "Traffic" .. index,
             Position = UDim2.new(0, item.X, 0.5, -6),
             Size = UDim2.new(0, 12, 0, 12),
             BackgroundColor3 = item.Color,
             Text = item.Text,
             AutoButtonColor = false,
+            Active = true,
+            ZIndex = 4,
             Parent = topbar,
         }, {corner(20)})
+        trafficButton.MouseEnter:Connect(function()
+            tween(trafficButton, {Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, item.X - 1, 0.5, -7)}, 0.12)
+        end)
+        trafficButton.MouseLeave:Connect(function()
+            tween(trafficButton, {Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(0, item.X, 0.5, -6)}, 0.12)
+        end)
     end
 
     local sidebar = make("Frame", {
@@ -607,6 +780,25 @@ function Chilly:CreateWindow(options)
     }, {
         padding(12, 12, 12, 12),
         listLayout(8, Enum.HorizontalAlignment.Center),
+    })
+
+    local tabSearch = make("TextBox", {
+        Name = "TabSearch",
+        Size = UDim2.new(1, 0, 0, 34),
+        BackgroundColor3 = theme.InputBackground,
+        Font = Enum.Font.Gotham,
+        PlaceholderText = "Search",
+        PlaceholderColor3 = theme.PlaceholderColor,
+        Text = "",
+        TextColor3 = theme.TextColor,
+        TextSize = 12,
+        ClearTextOnFocus = false,
+        LayoutOrder = -100,
+        Parent = sidebar,
+    }, {
+        corner(8),
+        stroke(theme.InputStroke, 1, 0.25),
+        padding(10, 10, 0, 0),
     })
 
     local content = make("Frame", {
@@ -632,10 +824,12 @@ function Chilly:CreateWindow(options)
 
     local self = setmetatable({
         Gui = gui,
+        Container = container,
         Root = root,
         Shadow = shadow,
         Topbar = topbar,
         Sidebar = sidebar,
+        TabSearch = tabSearch,
         Content = content,
         Title = title,
         ShowButton = showButton,
@@ -651,6 +845,124 @@ function Chilly:CreateWindow(options)
     Chilly.ActiveWindow = self
     table.insert(Chilly.Windows, self)
 
+    local closeButton = topbar:FindFirstChild("Traffic1")
+    local minimizeButton = topbar:FindFirstChild("Traffic2")
+    local focusButton = topbar:FindFirstChild("Traffic3")
+    if closeButton then
+        bindClick(closeButton, function()
+            self:Destroy()
+        end)
+    end
+    if minimizeButton then
+        bindClick(minimizeButton, function()
+            self:SetVisibility(false)
+        end)
+    end
+    if focusButton then
+        bindClick(focusButton, function()
+            Chilly:Notify({
+                Title = "Chilly",
+                Content = "Interface is already focused.",
+                Duration = 2,
+            })
+        end)
+    end
+
+    tabSearch:GetPropertyChangedSignal("Text"):Connect(function()
+        local query = string.lower(tabSearch.Text)
+        for _, tab in ipairs(self.Tabs) do
+            tab.Button.Visible = query == "" or string.find(string.lower(tostring(tab.Name)), query, 1, true) ~= nil
+        end
+    end)
+
+    if options.DisableLoadingAnimation ~= true then
+        local scale = make("UIScale", {
+            Scale = 0.94,
+            Parent = container,
+        })
+        local loader = make("Frame", {
+            Name = "BootAnimation",
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = theme.Background,
+            BackgroundTransparency = 0,
+            ZIndex = 50,
+            Parent = root,
+        })
+        local logo = make("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.45, -22),
+            Size = UDim2.new(0, 72, 0, 72),
+            BackgroundColor3 = theme.AccentSoft,
+            ZIndex = 51,
+            Parent = loader,
+        }, {
+            corner(18),
+            stroke(theme.Accent, 1, 0.05),
+        })
+        make("TextLabel", {
+            Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBlack,
+            Text = Chilly.Assets.LogoText,
+            TextColor3 = theme.TextColor,
+            TextSize = 22,
+            ZIndex = 52,
+            Parent = logo,
+        })
+        make("TextLabel", {
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 38),
+            Size = UDim2.new(0, 320, 0, 24),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            Text = options.LoadingTitle or "Chilly by Khai",
+            TextColor3 = theme.TextColor,
+            TextSize = 16,
+            ZIndex = 51,
+            Parent = loader,
+        })
+        make("TextLabel", {
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 64),
+            Size = UDim2.new(0, 360, 0, 22),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            Text = options.LoadingSubtitle or "initializing interface",
+            TextColor3 = theme.MutedText,
+            TextSize = 12,
+            ZIndex = 51,
+            Parent = loader,
+        })
+        local progressTrack = make("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 102),
+            Size = UDim2.new(0, 210, 0, 5),
+            BackgroundColor3 = theme.SecondaryElementBackground,
+            ZIndex = 51,
+            Parent = loader,
+        }, {corner(10)})
+        local progress = make("Frame", {
+            Size = UDim2.new(0, 0, 1, 0),
+            BackgroundColor3 = theme.Accent,
+            ZIndex = 52,
+            Parent = progressTrack,
+        }, {corner(10)})
+
+        tween(scale, {Scale = 1}, 0.34, Enum.EasingStyle.Back)
+        tween(progress, {Size = UDim2.new(1, 0, 1, 0)}, 0.78, Enum.EasingStyle.Quint)
+        task.delay(0.82, function()
+            if loader.Parent then
+                tween(loader, {BackgroundTransparency = 1}, 0.22)
+                tween(logo, {BackgroundTransparency = 1}, 0.22)
+                task.delay(0.24, function()
+                    if loader.Parent then
+                        loader:Destroy()
+                    end
+                end)
+            end
+        end)
+    end
+
     local dragging = false
     local dragStart
     local startPos
@@ -658,7 +970,7 @@ function Chilly:CreateWindow(options)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPos = root.Position
+            startPos = container.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -670,8 +982,7 @@ function Chilly:CreateWindow(options)
     UserInputService.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
-            root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            shadow.Position = UDim2.new(root.Position.X.Scale, root.Position.X.Offset, root.Position.Y.Scale, root.Position.Y.Offset + 8)
+            container.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 
@@ -755,13 +1066,28 @@ end
 
 function Window:SetVisibility(visible)
     self.Visible = visible == true
-    self.Root.Visible = self.Visible
-    self.Shadow.Visible = self.Visible
+    self.Container.Visible = self.Visible
     self.ShowButton.Visible = not self.Visible
 end
 
 function Window:IsVisible()
     return self.Visible
+end
+
+function Window:Hide()
+    self:SetVisibility(false)
+end
+
+function Window:Show()
+    self:SetVisibility(true)
+end
+
+function Window:SetTitle(title)
+    self.Title.Text = tostring(title)
+end
+
+function Window:Notify(options)
+    Chilly:Notify(options)
 end
 
 function Window:Destroy()
@@ -780,17 +1106,22 @@ function Window:ModifyTheme(theme)
     self.Root.BackgroundColor3 = self.Theme.Background
     self.Topbar.BackgroundColor3 = self.Theme.Topbar
     self.Sidebar.BackgroundColor3 = self.Theme.Sidebar
+    self.Shadow.BackgroundColor3 = self.Theme.Shadow
     self.Title.TextColor3 = self.Theme.TextColor
 end
 
 function Window:CreateTab(name, icon)
+    if type(name) == "table" then
+        icon = name.Icon
+        name = name.Name or "Tab"
+    end
     local tabButton = make("TextButton", {
         Name = tostring(name) .. "TabButton",
         Size = UDim2.new(1, 0, 0, 38),
         BackgroundColor3 = self.Theme.SecondaryElementBackground,
         AutoButtonColor = false,
         Font = Enum.Font.GothamSemibold,
-        Text = tostring(name),
+        Text = (iconText(icon) ~= "" and (iconText(icon) .. "  ") or "") .. tostring(name),
         TextColor3 = self.Theme.MutedText,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -853,6 +1184,8 @@ function Tab:ElementFrame(height)
     local frame = make("Frame", {
         Size = UDim2.new(1, 0, 0, height or 48),
         BackgroundColor3 = self.Theme.ElementBackground,
+        Active = false,
+        ZIndex = 3,
         Parent = self.Page,
     }, {
         corner(9),
@@ -959,13 +1292,15 @@ function Tab:CreateButton(options)
     local button = make("TextButton", {
         Size = UDim2.new(1, 0, 1, 0),
         BackgroundTransparency = 1,
+        Active = true,
+        ZIndex = 4,
         Font = Enum.Font.GothamSemibold,
         Text = options.Name or "Button",
         TextColor3 = self.Theme.TextColor,
         TextSize = 13,
         Parent = frame,
     })
-    button.MouseButton1Click:Connect(function()
+    bindClick(button, function()
         tween(frame, {BackgroundColor3 = self.Theme.AccentSoft}, 0.08)
         task.delay(0.1, function()
             if frame.Parent then
@@ -1035,13 +1370,16 @@ function Tab:CreateToggle(options)
         window:SaveConfiguration()
     end
 
-    pill.MouseButton1Click:Connect(function()
+    local hit = make("TextButton", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        Active = true,
+        ZIndex = 8,
+        Parent = frame,
+    })
+    bindClick(hit, function()
         object:Set(not object.CurrentValue)
-    end)
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            object:Set(not object.CurrentValue)
-        end
     end)
     task.defer(function()
         safeCall(options.Callback, object.CurrentValue)
@@ -1252,6 +1590,7 @@ function Tab:CreateDropdown(options)
         Text = "...",
         TextColor3 = self.Theme.MutedText,
         TextSize = 12,
+        Active = true,
         AutoButtonColor = false,
         Parent = frame,
     }, {
@@ -1305,6 +1644,7 @@ function Tab:CreateDropdown(options)
                 Text = tostring(option),
                 TextColor3 = self.Theme.TextColor,
                 TextSize = 12,
+                Active = true,
                 AutoButtonColor = false,
                 Parent = list,
             }, {corner(7)})
@@ -1539,6 +1879,7 @@ function Tab:CreateKeybind(options)
         Text = current.Name,
         TextColor3 = self.Theme.TextColor,
         TextSize = 12,
+        Active = true,
         AutoButtonColor = false,
         Parent = frame,
     }, {
@@ -1582,6 +1923,193 @@ function Tab:CreateKeybind(options)
         end
     end)
     return object
+end
+
+function Tab:CreateSpacer(height)
+    local spacer = make("Frame", {
+        Size = UDim2.new(1, 0, 0, height or 8),
+        BackgroundTransparency = 1,
+        Parent = self.Page,
+    })
+    local object = {Frame = spacer}
+    function object:Set(newHeight)
+        spacer.Size = UDim2.new(1, 0, 0, newHeight or height or 8)
+    end
+    function object:Destroy()
+        spacer:Destroy()
+    end
+    return object
+end
+
+function Tab:CreateProgress(options)
+    options = options or {}
+    local flag = options.Flag
+    local range = options.Range or {0, 100}
+    local min = range[1] or 0
+    local max = range[2] or 100
+    local current = math.clamp(Chilly.Flags[flag] or options.CurrentValue or min, min, max)
+    flagValue(flag, current)
+
+    local frame = self:ElementFrame(64)
+    make("TextLabel", {
+        Position = UDim2.new(0, 14, 0, 8),
+        Size = UDim2.new(1, -122, 0, 20),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamSemibold,
+        Text = options.Name or "Progress",
+        TextColor3 = self.Theme.TextColor,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = frame,
+    })
+    local valueLabel = make("TextLabel", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -14, 0, 8),
+        Size = UDim2.new(0, 110, 0, 20),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamSemibold,
+        TextColor3 = self.Theme.Accent,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Parent = frame,
+    })
+    local track = make("Frame", {
+        Position = UDim2.new(0, 14, 0, 40),
+        Size = UDim2.new(1, -28, 0, 8),
+        BackgroundColor3 = self.Theme.SliderBackground,
+        Parent = frame,
+    }, {
+        corner(10),
+        stroke(self.Theme.SecondaryElementStroke, 1, 0.45),
+    })
+    local fill = make("Frame", {
+        Size = UDim2.new(0, 0, 1, 0),
+        BackgroundColor3 = options.Color or self.Theme.SliderProgress,
+        Parent = track,
+    }, {corner(10)})
+
+    local object = {CurrentValue = current, Frame = frame}
+    function object:Set(value)
+        object.CurrentValue = math.clamp(value, min, max)
+        flagValue(flag, object.CurrentValue)
+        local pct = (object.CurrentValue - min) / math.max(max - min, 1)
+        valueLabel.Text = tostring(math.floor(pct * 100 + 0.5)) .. "%"
+        tween(fill, {Size = UDim2.new(pct, 0, 1, 0)}, 0.18)
+    end
+    function object:Destroy()
+        frame:Destroy()
+    end
+    object:Set(current)
+    return object
+end
+
+function Tab:CreateActionRow(options)
+    options = options or {}
+    local actions = options.Actions or {}
+    local frame = self:ElementFrame(58)
+    local titleWidth = options.Name and 160 or 0
+    if options.Name then
+        make("TextLabel", {
+            Position = UDim2.new(0, 14, 0, 0),
+            Size = UDim2.new(0, titleWidth, 1, 0),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamSemibold,
+            Text = options.Name,
+            TextColor3 = self.Theme.TextColor,
+            TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = frame,
+        })
+    end
+    local row = make("Frame", {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -14, 0.5, 0),
+        Size = UDim2.new(1, -titleWidth - 28, 0, 34),
+        BackgroundTransparency = 1,
+        Parent = frame,
+    }, {
+        make("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            Padding = UDim.new(0, 8),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+        }),
+    })
+    local object = {Frame = frame, Buttons = {}}
+    for _, action in ipairs(actions) do
+        local button = make("TextButton", {
+            Size = UDim2.new(0, math.clamp(string.len(tostring(action.Name or "Action")) * 8 + 28, 82, 150), 0, 34),
+            BackgroundColor3 = action.Primary and self.Theme.Accent or self.Theme.InputBackground,
+            Font = Enum.Font.GothamSemibold,
+            Text = tostring(action.Name or "Action"),
+            TextColor3 = self.Theme.TextColor,
+            TextSize = 12,
+            Active = true,
+            AutoButtonColor = false,
+            Parent = row,
+        }, {
+            corner(8),
+            stroke(action.Primary and self.Theme.SliderStroke or self.Theme.InputStroke, 1, 0.25),
+        })
+        bindClick(button, action.Callback)
+        table.insert(object.Buttons, button)
+    end
+    function object:Destroy()
+        frame:Destroy()
+    end
+    return object
+end
+
+function Tab:CreateCode(options)
+    options = options or {}
+    local frame = self:ElementFrame(options.Height or 120)
+    local box = make("TextBox", {
+        Position = UDim2.new(0, 14, 0, 12),
+        Size = UDim2.new(1, -28, 1, -24),
+        BackgroundColor3 = self.Theme.InputBackground,
+        Font = Enum.Font.Code,
+        Text = options.Code or options.Content or "",
+        TextColor3 = self.Theme.TextColor,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        ClearTextOnFocus = false,
+        MultiLine = true,
+        Active = true,
+        Parent = frame,
+    }, {
+        corner(8),
+        stroke(self.Theme.InputStroke, 1, 0.25),
+        padding(10, 10, 8, 8),
+    })
+    local object = {Frame = frame, Box = box}
+    function object:Set(text)
+        box.Text = tostring(text)
+    end
+    function object:Get()
+        return box.Text
+    end
+    function object:Destroy()
+        frame:Destroy()
+    end
+    return object
+end
+
+function Tab:CreateTextbox(options)
+    return self:CreateInput(options)
+end
+
+function Tab:CreateCheckbox(options)
+    return self:CreateToggle(options)
+end
+
+function Tab:CreateBind(options)
+    return self:CreateKeybind(options)
+end
+
+function Tab:CreateCard(options)
+    return self:CreateParagraph(options)
 end
 
 return Chilly
