@@ -1,210 +1,169 @@
-local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Chilly%20UI"))()
+-- Chilly authorized integration demo
+-- Replace the two URLs after uploading/publishing the enhanced files.
+-- This demo intentionally contains UI/dev-tool examples only.
 
-pcall(function()
-    local Assets = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/ChillyAssets.lua"))()
-    Chilly:LoadAssets(Assets)
-end)
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
 
-local Window = Chilly:CreateWindow({
-    Name = "Chilly by Khai",
-    Icon = "snowflake",
-    LoadingTitle = "Chilly Interface Suite",
-    LoadingSubtitle = "by Khai",
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+
+local UI_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/Chilly_UI_Enhanced.lua"
+local ASSETS_URL = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/Chilly_Assets_Enhanced.lua"
+
+local Chilly = loadstring(game:HttpGet(UI_URL))()
+local Assets = loadstring(game:HttpGet(ASSETS_URL))()
+Chilly:LoadAssets(Assets)
+Chilly:InstallRayfieldAlias()
+
+local Window = Chilly:CreateProfessionalWindow({
+    Name = "Chilly",
+    Icon = "dashboard",
+    LoadingTitle = "Chilly",
+    LoadingSubtitle = "Professional UI ready",
     ShowText = "Chilly",
-    Theme = "Chilly",
     ToggleUIKeybind = "K",
-    DisableLoadingAnimation = false,
-    LoadingDuration = 2.2,
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "Chilly",
-        FileName = "ExampleConfig",
-    },
-    Discord = {
-        Enabled = false,
-        Invite = "yourinvite",
-        RememberJoins = true,
-    },
-    KeySystem = false,
-    KeySettings = {
-        Title = "Chilly Key",
-        Subtitle = "Private access",
-        Note = "Enter your key.",
-        FileName = "ChillyKey",
-        SaveKey = true,
-        Key = {"Khai"},
+        FileName = "Chilly_Authorized_Config",
     },
 })
 
-local Main = Window:CreateTab("Main", "home")
-local Player = Window:CreateTab("Player", "user-round")
-local Settings = Window:CreateTab("Settings", "settings")
+local DashboardTab = Window:CreateTab("Dashboard", "dashboard")
+local InterfaceTab = Window:CreateTab("Interface", "palette")
+local ToolsTab = Window:CreateTab("Tools", "wrench")
+local LogsTab = Window:CreateTab("Logs", "terminal")
 
-Main:CreateSection("Basic")
-
-Main:CreateProgress({
-    Name = "Boot Quality",
-    Range = {0, 100},
-    CurrentValue = 92,
+DashboardTab:CreateHeader({
+    Title = "Runtime Overview",
+    Content = "Lightweight dashboard for authorized Roblox experiences.",
 })
 
-Main:CreateButton({
-    Name = "Say Hello",
-    Callback = function()
-        Chilly:Notify({
-            Title = "Chilly",
-            Content = "Hello from Chilly by Khai.",
-            Duration = 4,
-        })
-    end,
+local fpsStat = DashboardTab:CreateStat({
+    Name = "FPS",
+    Range = {0, 240},
+    Value = 60,
+    Color = Color3.fromRGB(75, 162, 255),
 })
 
-Main:CreateActionRow({
-    Name = "Quick Tools",
+local pingStat = DashboardTab:CreateStat({
+    Name = "Network Ping",
+    Range = {0, 400},
+    Value = 0,
+    Color = Color3.fromRGB(66, 226, 171),
+})
+
+DashboardTab:CreateNotice({
+    Level = "info",
+    Title = "Authorized use",
+    Content = "Keep gameplay logic inside experiences you own or have permission to test.",
+})
+
+InterfaceTab:CreateThemePreview({Theme = "Graphite"})
+InterfaceTab:CreateThemePreview({Theme = "Aurora"})
+InterfaceTab:CreateThemePreview({Theme = "Studio"})
+
+InterfaceTab:CreateSegmentedControl({
+    Name = "UI Density",
+    Options = {"Comfortable", "Compact", "Spacious"},
+    CurrentOption = "Comfortable",
+    Flag = "Chilly_Density",
+})
+
+InterfaceTab:CreateStepper({
+    Name = "Animation Speed",
+    Range = {50, 150},
+    Increment = 5,
+    CurrentValue = 100,
+    Suffix = "%",
+    Flag = "Chilly_AnimationSpeed",
+})
+
+ToolsTab:CreateQuickActions({
+    Name = "Session",
     Actions = {
         {
             Name = "Notify",
             Primary = true,
             Callback = function()
                 Chilly:Notify({
-                    Title = "Professional",
-                    Content = "Action row works cleanly.",
+                    Title = "Chilly",
+                    Content = "Enhanced UI is running.",
                     Duration = 3,
-                    Actions = {
-                        {Name = "OK", Callback = function() print("OK") end},
-                    },
+                    Image = "sparkles",
                 })
             end,
         },
         {
-            Name = "Print",
+            Name = "Save",
             Callback = function()
-                print("Chilly action row clicked")
+                Chilly:SaveConfiguration()
+            end,
+        },
+        {
+            Name = "Hide",
+            Callback = function()
+                Chilly:SetVisibility(false)
             end,
         },
     },
 })
 
-Main:CreateToggle({
-    Name = "Auto Farm",
-    CurrentValue = false,
-    Flag = "AutoFarm",
-    Callback = function(value)
-        print("Auto Farm:", value)
-    end,
-})
-
-Main:CreateSlider({
-    Name = "Farm Delay",
-    Range = {0, 10},
-    Increment = 0.5,
-    Suffix = "s",
-    CurrentValue = 2,
-    Flag = "FarmDelay",
-    Callback = function(value)
-        print("Delay:", value)
-    end,
-})
-
-Main:CreateDropdown({
-    Name = "Target Mode",
-    Options = {"Nearest", "Lowest HP", "Highest Value"},
-    CurrentOption = "Nearest",
-    Flag = "TargetMode",
-    Callback = function(option)
-        print("Target:", option)
-    end,
-})
-
-Main:CreateDropdown({
-    Name = "Multi Select",
-    Options = {"Coins", "Gems", "Drops", "Quests"},
-    CurrentOption = {"Coins"},
-    MultipleOptions = true,
-    Flag = "LootTypes",
-    Callback = function(options)
-        print("Loot:", table.concat(options, ", "))
-    end,
-})
-
-Player:CreateSection("Movement")
-
-Player:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 200},
-    Increment = 1,
-    Suffix = "studs",
-    CurrentValue = 16,
-    Flag = "WalkSpeed",
-    Callback = function(value)
-        local character = game.Players.LocalPlayer.Character
-        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = value
-        end
-    end,
-})
-
-Player:CreateInput({
-    Name = "Custom Message",
-    CurrentValue = "",
-    PlaceholderText = "Type here",
+ToolsTab:CreateInput({
+    Name = "Player Note",
+    PlaceholderText = "Write a local note",
     RemoveTextAfterFocusLost = false,
-    Flag = "Message",
-    Callback = function(text)
-        print("Message:", text)
-    end,
+    Flag = "Chilly_PlayerNote",
 })
 
-Player:CreateColorPicker({
-    Name = "ESP Color",
-    Color = Color3.fromRGB(85, 158, 255),
-    Flag = "EspColor",
-    Callback = function(color)
-        print("Color:", color)
-    end,
+ToolsTab:CreateToggle({
+    Name = "Show Notifications",
+    CurrentValue = true,
+    Flag = "Chilly_ShowNotifications",
 })
 
-Player:CreateKeybind({
-    Name = "Quick Action",
-    CurrentKeybind = "Q",
-    HoldToInteract = false,
-    Flag = "QuickAction",
-    Callback = function()
-        Chilly:Notify({
-            Title = "Keybind",
-            Content = "Quick Action pressed.",
-            Duration = 2,
-        })
-    end,
+local console = LogsTab:CreateMiniConsole({
+    Height = 180,
+    Text = "Chilly console initialized.",
 })
 
-Settings:CreateSection("Information")
-
-local Status = Settings:CreateLabel("Status: ready", "badge-check")
-
-Settings:CreateParagraph({
-    Title = "About",
-    Content = "Chilly by Khai is a deep-blue macOS-style Roblox UI library with a Rayfield-style API.",
+LogsTab:CreateQuickActions({
+    Name = "Console",
+    Actions = {
+        {
+            Name = "Append",
+            Primary = true,
+            Callback = function()
+                console:Append("Player: " .. (LocalPlayer and LocalPlayer.Name or "Unknown"))
+            end,
+        },
+        {
+            Name = "Clear",
+            Callback = function()
+                console:Clear()
+            end,
+        },
+    },
 })
 
-Settings:CreateCode({
-    Height = 110,
-    Code = "print('Chilly by Khai')\n-- Toggle UI: K\n-- Clean layer, no screen-blocking shadow",
-})
-
-Settings:CreateDivider()
-
-Settings:CreateButton({
-    Name = "Set Status",
-    Callback = function()
-        Status:Set("Status: updated")
-    end,
-})
-
-Settings:CreateButton({
-    Name = "Destroy UI",
-    Callback = function()
-        Chilly:Destroy()
-    end,
-})
+local frames = 0
+local elapsed = 0
+RunService.RenderStepped:Connect(function(delta)
+    frames += 1
+    elapsed += delta
+    if elapsed >= 1 then
+        fpsStat:Set(frames)
+        frames = 0
+        elapsed = 0
+        local ping = 0
+        pcall(function()
+            ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+        end)
+        pingStat:Set(math.clamp(math.floor(ping + 0.5), 0, 400))
+    end
+end)
