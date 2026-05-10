@@ -18,6 +18,7 @@ local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer and LocalPlayer:GetMouse()
+local CurrentCamera = workspace.CurrentCamera
 
 local function noop() end
 
@@ -97,6 +98,17 @@ local function listLayout(spacing, alignment)
         SortOrder = Enum.SortOrder.LayoutOrder,
         HorizontalAlignment = alignment or Enum.HorizontalAlignment.Center,
     })
+end
+
+local function iconName(icon)
+    if icon == nil or icon == 0 then
+        return nil
+    end
+    if type(icon) == "number" then
+        return nil
+    end
+    local key = string.lower(tostring(icon))
+    return key
 end
 
 local function normalizeKey(key)
@@ -233,29 +245,37 @@ Chilly.Themes.Ocean = deepMerge(Chilly.Themes.Chilly, {
 
 Chilly.Assets = {
     LogoText = "CK",
+    UseImages = true,
+    LucideModel = 15279939717,
+    Images = {},
     Icons = {
-        home = "H",
-        settings = "S",
-        user = "U",
-        shield = "#",
-        target = "+",
-        bolt = "*",
-        search = "?",
-        palette = "P",
-        keyboard = "K",
-        info = "i",
-        warning = "!",
-        check = "v",
+        home = "home",
+        settings = "settings",
+        user = "user",
+        shield = "shield",
+        target = "target",
+        bolt = "zap",
+        search = "search",
+        palette = "palette",
+        keyboard = "keyboard",
+        info = "info",
+        warning = "triangle-alert",
+        check = "check",
         close = "x",
-        copy = "C",
-        save = "D",
-        refresh = "R",
-        eye = "O",
-        eyeoff = "-",
-        terminal = ">",
-        sliders = "=",
-        list = "L",
-        bell = "B",
+        copy = "copy",
+        save = "save",
+        refresh = "refresh-cw",
+        eye = "eye",
+        eyeoff = "eye-off",
+        terminal = "terminal",
+        sliders = "sliders-horizontal",
+        list = "list",
+        bell = "bell",
+        folder = "folder",
+        player = "user-round",
+        combat = "swords",
+        world = "globe-2",
+        visual = "scan-eye",
     },
     Sounds = {
         Open = "",
@@ -271,7 +291,98 @@ local function iconText(icon)
     if type(icon) == "number" then
         return ""
     end
-    return Chilly.Assets.Icons[string.lower(tostring(icon))] or string.sub(tostring(icon), 1, 1)
+    local mapped = Chilly.Assets.Icons[string.lower(tostring(icon))]
+    if type(mapped) == "string" and #mapped == 1 then
+        return mapped
+    end
+    return string.upper(string.sub(tostring(icon), 1, 1))
+end
+
+local function resolveImageAsset(icon)
+    if not Chilly.Assets.UseImages then
+        return nil
+    end
+    if type(icon) == "number" and icon ~= 0 then
+        return {
+            Image = "rbxassetid://" .. tostring(icon),
+            RectOffset = Vector2.new(0, 0),
+            RectSize = Vector2.new(0, 0),
+        }
+    end
+    if type(icon) ~= "string" then
+        return nil
+    end
+
+    local mapped = Chilly.Assets.Images[icon] or Chilly.Assets.Images[string.lower(icon)]
+    if type(mapped) == "number" then
+        return {
+            Image = "rbxassetid://" .. tostring(mapped),
+            RectOffset = Vector2.new(0, 0),
+            RectSize = Vector2.new(0, 0),
+        }
+    elseif type(mapped) == "table" then
+        return {
+            Image = mapped.Image or mapped.Url or (mapped.Id and ("rbxassetid://" .. tostring(mapped.Id))),
+            RectOffset = mapped.ImageRectOffset or mapped.RectOffset or Vector2.new(0, 0),
+            RectSize = mapped.ImageRectSize or mapped.RectSize or Vector2.new(0, 0),
+        }
+    end
+
+    if Chilly.Lucide then
+        local lucideName = Chilly.Assets.Icons[string.lower(icon)]
+        if type(lucideName) ~= "string" then
+            lucideName = string.lower(icon)
+        end
+        local ok, asset = pcall(function()
+            return Chilly.Lucide.GetAsset(lucideName, 48)
+        end)
+        if ok and asset then
+            return {
+                Image = asset.Url or (asset.Id and ("rbxassetid://" .. tostring(asset.Id))),
+                RectOffset = asset.ImageRectOffset or Vector2.new(0, 0),
+                RectSize = asset.ImageRectSize or Vector2.new(0, 0),
+            }
+        end
+    end
+
+    return nil
+end
+
+local function makeIcon(icon, properties)
+    properties = properties or {}
+    local asset = resolveImageAsset(icon)
+    if asset and asset.Image then
+        local imageProperties = {}
+        for key, value in pairs(properties) do
+            if key ~= "TextColor3" and key ~= "TextSize" and key ~= "Font" and key ~= "Text" then
+                imageProperties[key] = value
+            end
+        end
+        local image = make("ImageLabel", deepMerge({
+            Name = "Icon",
+            BackgroundTransparency = 1,
+            Image = asset.Image,
+            ImageColor3 = properties.ImageColor3 or properties.TextColor3 or Color3.fromRGB(255, 255, 255),
+            ScaleType = Enum.ScaleType.Fit,
+            ImageRectOffset = asset.RectOffset,
+            ImageRectSize = asset.RectSize,
+        }, imageProperties))
+        return image
+    end
+    local textProperties = {}
+    for key, value in pairs(properties) do
+        if key ~= "ImageColor3" and key ~= "ImageRectOffset" and key ~= "ImageRectSize" and key ~= "ScaleType" and key ~= "Image" then
+            textProperties[key] = value
+        end
+    end
+    return make("TextLabel", deepMerge({
+        Name = "Icon",
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = iconText(icon),
+        TextColor3 = properties.TextColor3 or Color3.fromRGB(255, 255, 255),
+        TextSize = properties.TextSize or 13,
+    }, textProperties))
 end
 
 local Window = {}
@@ -344,9 +455,20 @@ function Chilly:LoadAssets(assetPack)
     if type(assetPack) ~= "table" then
         return self.Assets
     end
+    if assetPack.UseImages ~= nil then
+        self.Assets.UseImages = assetPack.UseImages == true
+    end
+    if assetPack.LucideModel then
+        self.Assets.LucideModel = assetPack.LucideModel
+    end
     if type(assetPack.Icons) == "table" then
         for key, value in pairs(assetPack.Icons) do
             self.Assets.Icons[key] = value
+        end
+    end
+    if type(assetPack.Images) == "table" then
+        for key, value in pairs(assetPack.Images) do
+            self.Assets.Images[key] = value
         end
     end
     if assetPack.LogoText then
@@ -358,6 +480,53 @@ function Chilly:LoadAssets(assetPack)
         end
     end
     return self.Assets
+end
+
+function Chilly:LoadLucide(source)
+    if self.Lucide then
+        return self.Lucide
+    end
+
+    local candidate = source
+    if candidate == nil then
+        candidate = self.Assets.LucideModel
+    end
+
+    local moduleScript
+    if typeof(candidate) == "Instance" then
+        if candidate:IsA("ModuleScript") then
+            moduleScript = candidate
+        else
+            moduleScript = candidate:FindFirstChildWhichIsA("ModuleScript", true)
+        end
+    elseif type(candidate) == "number" or type(candidate) == "string" then
+        local id = tostring(candidate):gsub("rbxassetid://", "")
+        local ok, objects = pcall(function()
+            return game:GetObjects("rbxassetid://" .. id)
+        end)
+        if ok and type(objects) == "table" then
+            for _, object in ipairs(objects) do
+                if object:IsA("ModuleScript") then
+                    moduleScript = object
+                    break
+                end
+                moduleScript = object:FindFirstChildWhichIsA("ModuleScript", true)
+                if moduleScript then
+                    break
+                end
+            end
+        end
+    end
+
+    if moduleScript then
+        local ok, lucide = pcall(require, moduleScript)
+        if ok and type(lucide) == "table" and type(lucide.GetAsset) == "function" then
+            self.Lucide = lucide
+            return lucide
+        end
+    end
+
+    return nil
 end
 
 function Chilly:GetFlag(flag)
@@ -681,6 +850,12 @@ function Chilly:CreateWindow(options)
         theme = self.Themes.Chilly
     end
 
+    if self.Assets.UseImages and not self.Lucide and options.DisableLucide ~= true then
+        pcall(function()
+            self:LoadLucide(options.LucideSource)
+        end)
+    end
+
     local gui = make("ScreenGui", {
         Name = "ChillyByKhai",
         ResetOnSpawn = false,
@@ -845,6 +1020,20 @@ function Chilly:CreateWindow(options)
     Chilly.ActiveWindow = self
     table.insert(Chilly.Windows, self)
 
+    if options.Icon and options.Icon ~= 0 then
+        makeIcon(options.Icon, {
+            Position = UDim2.new(0, 92, 0.5, -9),
+            Size = UDim2.new(0, 18, 0, 18),
+            TextColor3 = theme.Accent,
+            ImageColor3 = theme.Accent,
+            TextSize = 14,
+            ZIndex = 4,
+            Parent = topbar,
+        })
+        title.Position = UDim2.new(0, 120, 0, 0)
+        title.Size = UDim2.new(1, -178, 1, 0)
+    end
+
     local closeButton = topbar:FindFirstChild("Traffic1")
     local minimizeButton = topbar:FindFirstChild("Traffic2")
     local focusButton = topbar:FindFirstChild("Traffic3")
@@ -860,11 +1049,7 @@ function Chilly:CreateWindow(options)
     end
     if focusButton then
         bindClick(focusButton, function()
-            Chilly:Notify({
-                Title = "Chilly",
-                Content = "Interface is already focused.",
-                Duration = 2,
-            })
+            self:ToggleMaximize()
         end)
     end
 
@@ -876,8 +1061,9 @@ function Chilly:CreateWindow(options)
     end)
 
     if options.DisableLoadingAnimation ~= true then
+        local loadingDuration = options.LoadingDuration or 2.15
         local scale = make("UIScale", {
-            Scale = 0.94,
+            Scale = 0.965,
             Parent = container,
         })
         local loader = make("Frame", {
@@ -890,8 +1076,8 @@ function Chilly:CreateWindow(options)
         })
         local logo = make("Frame", {
             AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.new(0.5, 0, 0.45, -22),
-            Size = UDim2.new(0, 72, 0, 72),
+            Position = UDim2.new(0.5, 0, 0.44, -24),
+            Size = UDim2.new(0, 78, 0, 78),
             BackgroundColor3 = theme.AccentSoft,
             ZIndex = 51,
             Parent = loader,
@@ -899,37 +1085,43 @@ function Chilly:CreateWindow(options)
             corner(18),
             stroke(theme.Accent, 1, 0.05),
         })
-        make("TextLabel", {
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            Font = Enum.Font.GothamBlack,
-            Text = Chilly.Assets.LogoText,
+        local logoScale = make("UIScale", {
+            Scale = 0.88,
+            Parent = logo,
+        })
+        makeIcon(options.Icon or "app-window-mac", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            Size = UDim2.new(0, 34, 0, 34),
             TextColor3 = theme.TextColor,
-            TextSize = 22,
+            ImageColor3 = theme.TextColor,
+            TextSize = 20,
             ZIndex = 52,
             Parent = logo,
         })
-        make("TextLabel", {
+        local loadingTitle = make("TextLabel", {
             AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0.5, 38),
+            Position = UDim2.new(0.5, 0, 0.5, 42),
             Size = UDim2.new(0, 320, 0, 24),
             BackgroundTransparency = 1,
             Font = Enum.Font.GothamSemibold,
             Text = options.LoadingTitle or "Chilly by Khai",
             TextColor3 = theme.TextColor,
             TextSize = 16,
+            TextTransparency = 1,
             ZIndex = 51,
             Parent = loader,
         })
-        make("TextLabel", {
+        local loadingSubtitle = make("TextLabel", {
             AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0.5, 64),
+            Position = UDim2.new(0.5, 0, 0.5, 68),
             Size = UDim2.new(0, 360, 0, 22),
             BackgroundTransparency = 1,
             Font = Enum.Font.Gotham,
-            Text = options.LoadingSubtitle or "initializing interface",
+            Text = "Preparing assets",
             TextColor3 = theme.MutedText,
             TextSize = 12,
+            TextTransparency = 1,
             ZIndex = 51,
             Parent = loader,
         })
@@ -948,13 +1140,50 @@ function Chilly:CreateWindow(options)
             Parent = progressTrack,
         }, {corner(10)})
 
-        tween(scale, {Scale = 1}, 0.34, Enum.EasingStyle.Back)
-        tween(progress, {Size = UDim2.new(1, 0, 1, 0)}, 0.78, Enum.EasingStyle.Quint)
-        task.delay(0.82, function()
+        local glow = make("Frame", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            Size = UDim2.new(1, 28, 1, 28),
+            BackgroundColor3 = theme.Accent,
+            BackgroundTransparency = 0.88,
+            ZIndex = 50,
+            Parent = logo,
+        }, {corner(24)})
+
+        tween(scale, {Scale = 1}, 0.55, Enum.EasingStyle.Quint)
+        tween(logoScale, {Scale = 1}, 0.48, Enum.EasingStyle.Back)
+        tween(loadingTitle, {TextTransparency = 0}, 0.42)
+        task.delay(0.18, function()
+            if loadingSubtitle.Parent then
+                tween(loadingSubtitle, {TextTransparency = 0}, 0.35)
+            end
+        end)
+        local stages = options.LoadingStages or {
+            {Text = "Preparing assets", Progress = 0.28, Delay = 0.18},
+            {Text = "Building interface", Progress = 0.58, Delay = loadingDuration * 0.34},
+            {Text = options.LoadingSubtitle or "Ready", Progress = 1, Delay = loadingDuration * 0.66},
+        }
+        for _, stage in ipairs(stages) do
+            task.delay(stage.Delay or 0, function()
+                if progress.Parent then
+                    loadingSubtitle.Text = stage.Text or loadingSubtitle.Text
+                    tween(progress, {Size = UDim2.new(stage.Progress or 1, 0, 1, 0)}, 0.55, Enum.EasingStyle.Quint)
+                    tween(glow, {BackgroundTransparency = 0.78}, 0.22)
+                    task.delay(0.24, function()
+                        if glow.Parent then
+                            tween(glow, {BackgroundTransparency = 0.9}, 0.35)
+                        end
+                    end)
+                end
+            end)
+        end
+        task.delay(loadingDuration, function()
             if loader.Parent then
                 tween(loader, {BackgroundTransparency = 1}, 0.22)
                 tween(logo, {BackgroundTransparency = 1}, 0.22)
-                task.delay(0.24, function()
+                tween(loadingTitle, {TextTransparency = 1}, 0.18)
+                tween(loadingSubtitle, {TextTransparency = 1}, 0.18)
+                task.delay(0.28, function()
                     if loader.Parent then
                         loader:Destroy()
                     end
@@ -1082,6 +1311,32 @@ function Window:Show()
     self:SetVisibility(true)
 end
 
+function Window:ToggleMaximize()
+    if self.Maximized then
+        self.Maximized = false
+        if self.PreMaximize then
+            tween(self.Container, {
+                Position = self.PreMaximize.Position,
+                Size = self.PreMaximize.Size,
+            }, 0.28, Enum.EasingStyle.Quint)
+        end
+        return
+    end
+
+    self.Maximized = true
+    self.PreMaximize = {
+        Position = self.Container.Position,
+        Size = self.Container.Size,
+    }
+    local viewport = CurrentCamera and CurrentCamera.ViewportSize or Vector2.new(1280, 720)
+    local margin = viewport.X < 700 and 18 or 54
+    tween(self.Container, {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1, -margin * 2, 1, -margin * 2),
+    }, 0.3, Enum.EasingStyle.Quint)
+end
+
 function Window:SetTitle(title)
     self.Title.Text = tostring(title)
 end
@@ -1121,7 +1376,7 @@ function Window:CreateTab(name, icon)
         BackgroundColor3 = self.Theme.SecondaryElementBackground,
         AutoButtonColor = false,
         Font = Enum.Font.GothamSemibold,
-        Text = (iconText(icon) ~= "" and (iconText(icon) .. "  ") or "") .. tostring(name),
+        Text = "",
         TextColor3 = self.Theme.MutedText,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1129,6 +1384,27 @@ function Window:CreateTab(name, icon)
     }, {
         corner(8),
         padding(12, 12, 0, 0),
+    })
+    makeIcon(icon or "circle", {
+        Position = UDim2.new(0, 12, 0.5, -8),
+        Size = UDim2.new(0, 16, 0, 16),
+        TextColor3 = self.Theme.MutedText,
+        ImageColor3 = self.Theme.MutedText,
+        TextSize = 12,
+        ZIndex = 4,
+        Parent = tabButton,
+    })
+    make("TextLabel", {
+        Position = UDim2.new(0, 36, 0, 0),
+        Size = UDim2.new(1, -48, 1, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamSemibold,
+        Text = tostring(name),
+        TextColor3 = self.Theme.MutedText,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 4,
+        Parent = tabButton,
     })
 
     local page = make("ScrollingFrame", {
@@ -1176,6 +1452,13 @@ function Window:SelectTab(tab)
             BackgroundColor3 = active and self.Theme.AccentSoft or self.Theme.SecondaryElementBackground,
             TextColor3 = active and self.Theme.TextColor or self.Theme.MutedText,
         }, 0.16)
+        for _, child in ipairs(other.Button:GetChildren()) do
+            if child:IsA("TextLabel") then
+                tween(child, {TextColor3 = active and self.Theme.TextColor or self.Theme.MutedText}, 0.16)
+            elseif child:IsA("ImageLabel") then
+                tween(child, {ImageColor3 = active and self.Theme.TextColor or self.Theme.MutedText}, 0.16)
+            end
+        end
     end
     self.ActiveTab = tab
 end
@@ -1230,9 +1513,21 @@ end
 function Tab:CreateLabel(text, icon, color, ignoreTheme)
     local frame = self:ElementFrame(42)
     local theme = self.Theme
+    local textOffset = (icon and icon ~= 0) and 42 or 14
+    if icon and icon ~= 0 then
+        makeIcon(icon, {
+            Position = UDim2.new(0, 14, 0.5, -8),
+            Size = UDim2.new(0, 16, 0, 16),
+            TextColor3 = color or theme.TextColor,
+            ImageColor3 = color or theme.TextColor,
+            TextSize = 12,
+            ZIndex = 4,
+            Parent = frame,
+        })
+    end
     make("TextLabel", {
-        Position = UDim2.new(0, 14, 0, 0),
-        Size = UDim2.new(1, -28, 1, 0),
+        Position = UDim2.new(0, textOffset, 0, 0),
+        Size = UDim2.new(1, -textOffset - 14, 1, 0),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamSemibold,
         Text = tostring(text),
