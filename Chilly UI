@@ -1,0 +1,99 @@
+-- Chilly by Khai
+-- A clean deep-blue Roblox UI library with a Rayfield-inspired API.
+
+local Chilly = {
+    Name = "Chilly",
+    Version = "1.0.0",
+    Flags = {},
+    Themes = {},
+    Windows = {},
+    Connections = {},
+}
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer and LocalPlayer:GetMouse()
+
+local function noop() end
+
+local function safeCall(callback, ...)
+    if type(callback) == "function" then
+        local ok, err = pcall(callback, ...)
+        if not ok then
+            warn("[Chilly] callback error:", err)
+        end
+    end
+end
+
+local function tween(instance, properties, duration, style, direction)
+    local info = TweenInfo.new(duration or 0.18, style or Enum.EasingStyle.Quart, direction or Enum.EasingDirection.Out)
+    local created = TweenService:Create(instance, info, properties)
+    created:Play()
+    return created
+end
+
+local function make(className, properties, children)
+    local instance = Instance.new(className)
+    for key, value in pairs(properties or {}) do
+        instance[key] = value
+    end
+    for _, child in ipairs(children or {}) do
+        child.Parent = instance
+    end
+    return instance
+end
+
+local function corner(radius)
+    return make("UICorner", {CornerRadius = UDim.new(0, radius or 8)})
+end
+
+local function stroke(color, thickness, transparency)
+    return make("UIStroke", {
+        Color = color,
+        Thickness = thickness or 1,
+        Transparency = transparency or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    })
+end
+
+local function padding(left, right, top, bottom)
+    return make("UIPadding", {
+        PaddingLeft = UDim.new(0, left or 0),
+        PaddingRight = UDim.new(0, right or left or 0),
+        PaddingTop = UDim.new(0, top or left or 0),
+        PaddingBottom = UDim.new(0, bottom or top or left or 0),
+    })
+end
+
+local function listLayout(spacing, alignment)
+    return make("UIListLayout", {
+        Padding = UDim.new(0, spacing or 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = alignment or Enum.HorizontalAlignment.Center,
+    })
+end
+
+local function normalizeKey(key)
+    if typeof(key) == "EnumItem" then
+        return key
+    end
+    if type(key) == "string" and Enum.KeyCode[key] then
+        return Enum.KeyCode[key]
+    end
+    return Enum.KeyCode.RightControl
+end
+
+local function getParent()
+    local ok, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if ok and coreGui then
+        return coreGui
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
