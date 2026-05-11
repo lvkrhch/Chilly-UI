@@ -21,10 +21,9 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 if not LocalPlayer then
-    warn("[Chilly] LocalPlayer tidak ada. Jalankan script ini sebagai LocalScript/client script, bukan Script server.")
+    warn("[Chilly] LocalPlayer tidak ada. Jalankan sebagai LocalScript/client.")
     return
 end
-
 local Chilly
 print("[Chilly] Loading bundled UI...")
 do
@@ -5747,19 +5746,11 @@ local noReloadEnabled = false
 local currentWeapon
 local currentWeaponData = {}
 local patchedWeaponValues = {}
-local patchedWeaponAttributes = {}
-local patchedConfigValues = {}
-local weaponPatchStats = {
-    Values = 0,
-    Attributes = 0,
-    Tables = 0
-}
 local AimbotPredictionToggle
 local PredictionStrengthSlider
 local BulletSpeedSlider
 local BulletDropToggle
 local BulletDropScaleSlider
-local SilentAimToggle
 
 local espEnabled = false
 local espEnemy = false
@@ -6357,78 +6348,6 @@ _G.Chilly_GetSilentAimTarget = function()
     return part, getPredictedAimPosition(part), player
 end
 
-local function getSilentAimData()
-    local part, position, player = _G.Chilly_GetSilentAimTarget()
-    if not part or not position or not player then
-        return nil
-    end
-
-    return {
-        Part = part,
-        Position = position,
-        Player = player
-    }
-end
-
-local function installSilentAimHook()
-    if _G.Chilly_SilentAimHookInstalled then
-        return true, "already installed"
-    end
-
-    if typeof(hookmetamethod) ~= "function" or typeof(newcclosure) ~= "function" or typeof(getnamecallmethod) ~= "function" then
-        return false, "executor hook API unavailable"
-    end
-
-    local ok, err = pcall(function()
-        local oldNamecall
-        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            local args = {...}
-            local data = getSilentAimData()
-
-            if data and (typeof(checkcaller) ~= "function" or not checkcaller()) then
-                if self == workspace and method == "Raycast" and typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
-                    local origin = args[1]
-                    args[2] = (data.Position - origin).Unit * math.max(args[2].Magnitude, (data.Position - origin).Magnitude + 25)
-                    return oldNamecall(self, unpack(args))
-                elseif method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" or method == "FindPartOnRay" then
-                    local ray = args[1]
-                    if typeof(ray) == "Ray" then
-                        local origin = ray.Origin
-                        local distance = math.max(ray.Direction.Magnitude, (data.Position - origin).Magnitude + 25)
-                        args[1] = Ray.new(origin, (data.Position - origin).Unit * distance)
-                        return oldNamecall(self, unpack(args))
-                    end
-                end
-            end
-
-            return oldNamecall(self, ...)
-        end))
-
-        local mouse = LocalPlayer:GetMouse()
-        local oldIndex
-        oldIndex = hookmetamethod(mouse, "__index", newcclosure(function(self, key)
-            local data = getSilentAimData()
-            if data and (typeof(checkcaller) ~= "function" or not checkcaller()) then
-                if key == "Hit" then
-                    return CFrame.new(data.Position)
-                elseif key == "Target" then
-                    return data.Part
-                end
-            end
-
-            return oldIndex(self, key)
-        end))
-    end)
-
-    if ok then
-        _G.Chilly_SilentAimHookInstalled = true
-        return true, "hook installed"
-    end
-
-    return false, tostring(err)
-end
-
 local function applyHitboxes()
     if antiKickFriendly then
         return
@@ -6630,35 +6549,71 @@ local function getCharacterBox2D(character)
     if not character or not Camera then return nil end
 
     local root = character:FindFirstChild("HumanoidRootPart")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not root then
         return nil
     end
 
-    local rootScreen, onScreen = Camera:WorldToViewportPoint(root.Position)
-    if not onScreen or rootScreen.Z <= 0 then
+    local rootScreen = Camera:WorldToViewportPoint(root.Position)
+    if rootScreen.Z <= 0 then
         return nil
     end
 
-    local heightStuds = humanoid and math.max(humanoid.HipHeight + 4.2, 5.2) or 5.6
-    local topWorld = root.Position + Vector3.new(0, heightStuds * 0.62, 0)
-    local bottomWorld = root.Position - Vector3.new(0, heightStuds * 0.48, 0)
-    local topScreen = Camera:WorldToViewportPoint(topWorld)
-    local bottomScreen = Camera:WorldToViewportPoint(bottomWorld)
+    local minX = math.huge
+    local minY = math.huge
+    local maxX = -math.huge
+    local maxY = -math.huge
+    local pointCount = 0
+
+    for _, part in ipairs(character:GetDescendants()) do
+        if isRenderableBodyPart(part) then
+            local half = part.Size / 2
+            local offsets = {
+                Vector3.new(-half.X, -half.Y, -half.Z),
+                Vector3.new(-half.X, -half.Y, half.Z),
+                Vector3.new(-half.X, half.Y, -half.Z),
+                Vector3.new(-half.X, half.Y, half.Z),
+                Vector3.new(half.X, -half.Y, -half.Z),
+                Vector3.new(half.X, -half.Y, half.Z),
+                Vector3.new(half.X, half.Y, -half.Z),
+                Vector3.new(half.X, half.Y, half.Z)
+            }
+
+            for _, offset in ipairs(offsets) do
+                local worldPoint = part.CFrame:PointToWorldSpace(offset)
+                local screenPoint = Camera:WorldToViewportPoint(worldPoint)
+
+                if screenPoint.Z > 0 then
+                    pointCount += 1
+                    minX = math.min(minX, screenPoint.X)
+                    minY = math.min(minY, screenPoint.Y)
+                    maxX = math.max(maxX, screenPoint.X)
+                    maxY = math.max(maxY, screenPoint.Y)
+                end
+            end
+        end
+    end
+
+    if pointCount == 0 then
+        return nil
+    end
+
     local viewport = Camera.ViewportSize
+    minX = math.clamp(minX, -viewport.X * 0.1, viewport.X * 1.1)
+    maxX = math.clamp(maxX, -viewport.X * 0.1, viewport.X * 1.1)
+    minY = math.clamp(minY, -viewport.Y * 0.1, viewport.Y * 1.1)
+    maxY = math.clamp(maxY, -viewport.Y * 0.1, viewport.Y * 1.1)
 
-    if topScreen.Z <= 0 or bottomScreen.Z <= 0 then
+    local width = maxX - minX
+    local height = maxY - minY
+
+    if width < 2 or height < 2 then
         return nil
     end
 
-    local height = math.abs(bottomScreen.Y - topScreen.Y)
-    height = math.clamp(height * espScale, 26, viewport.Y * 0.85)
-    local width = math.clamp(height * 0.46, 14, 110)
-    local centerX = rootScreen.X
-    local centerY = (topScreen.Y + bottomScreen.Y) / 2
+    local centerX = (minX + maxX) / 2
+    local centerY = (minY + maxY) / 2
 
-    centerX = math.clamp(centerX, -viewport.X * 0.1, viewport.X * 1.1)
-    centerY = math.clamp(centerY, -viewport.Y * 0.1, viewport.Y * 1.1)
+    height = math.clamp(height * espScale, 28, viewport.Y * 0.92)
     width = math.clamp(width * espScale, height * 0.28, height * 0.72)
 
     return {
@@ -7296,11 +7251,8 @@ local function isRecoilKey(name)
         or key:find("kickback")
         or key:find("spread")
         or key:find("kick")
-        or key:find("gunforce")
         or key:find("viewpunch")
         or key:find("aimpunch")
-        or key:find("vertical")
-        or key:find("horizontal")
 end
 
 local function isShakeKey(name)
@@ -7310,18 +7262,14 @@ local function isShakeKey(name)
         or key:find("sway")
         or key:find("camera")
         or key:find("cam")
-        or key:find("viewmodel")
-        or key:find("screenshake")
 end
 
 local function isReloadKey(name)
     local key = normalizeWeaponKey(name)
     return key:find("reload")
         or key == "reloading"
-        or key:find("ammowait")
         or key:find("chamber")
         or key:find("bolttime")
-        or key:find("equiptime")
 end
 
 local function isAmmoKey(name)
@@ -7331,9 +7279,7 @@ local function isAmmoKey(name)
         or key == "mag"
         or key == "magazine"
         or key == "clip"
-        or key == "bullets"
         or key:find("ammoinmag")
-        or key:find("currentmag")
 end
 
 local function isBulletSpeedKey(name)
@@ -7342,15 +7288,7 @@ local function isBulletSpeedKey(name)
         return false
     end
 
-    return key:find("bulletspeed")
-        or key:find("projectilespeed")
-        or key:find("projectilevelocity")
-        or key:find("bulletvelocity")
-        or key:find("muzzlevelocity")
-        or key:find("travelspeed")
-        or key:find("roundspeed")
-        or key == "speed"
-        or key == "velocity"
+    return key:find("bulletspeed") or key:find("projectilespeed") or key:find("projectilevelocity") or key:find("bulletvelocity") or key:find("muzzlevelocity") or key:find("travelspeed") or key == "speed" or key == "velocity"
 end
 
 local function isBulletDropKey(name)
@@ -7370,80 +7308,7 @@ local function patchValueObject(valueObject, newValue)
     patchedWeaponValues[valueObject] = valueObject.Value
     pcall(function()
         valueObject.Value = newValue
-        weaponPatchStats.Values += 1
     end)
-end
-
-local function patchAttribute(instance, name, newValue)
-    if not instance or typeof(name) ~= "string" then
-        return
-    end
-
-    patchedWeaponAttributes[instance] = patchedWeaponAttributes[instance] or {}
-    if patchedWeaponAttributes[instance][name] ~= nil then
-        return
-    end
-
-    local current = instance:GetAttribute(name)
-    if current == nil then
-        return
-    end
-
-    patchedWeaponAttributes[instance][name] = current
-    pcall(function()
-        instance:SetAttribute(name, newValue)
-        weaponPatchStats.Attributes += 1
-    end)
-end
-
-local function patchConfigValue(tbl, key, newValue)
-    patchedConfigValues[tbl] = patchedConfigValues[tbl] or {}
-    if patchedConfigValues[tbl][key] ~= nil then
-        return
-    end
-
-    patchedConfigValues[tbl][key] = tbl[key]
-    pcall(function()
-        tbl[key] = newValue
-        weaponPatchStats.Tables += 1
-    end)
-end
-
-local function restoreWeaponPatches()
-    for valueObject, oldValue in pairs(patchedWeaponValues) do
-        if valueObject and valueObject.Parent then
-            pcall(function()
-                valueObject.Value = oldValue
-            end)
-        end
-    end
-
-    for instance, attributes in pairs(patchedWeaponAttributes) do
-        if instance and instance.Parent then
-            for name, oldValue in pairs(attributes) do
-                pcall(function()
-                    instance:SetAttribute(name, oldValue)
-                end)
-            end
-        end
-    end
-
-    for tbl, values in pairs(patchedConfigValues) do
-        if typeof(tbl) == "table" then
-            for key, oldValue in pairs(values) do
-                pcall(function()
-                    tbl[key] = oldValue
-                end)
-            end
-        end
-    end
-
-    table.clear(patchedWeaponValues)
-    table.clear(patchedWeaponAttributes)
-    table.clear(patchedConfigValues)
-    weaponPatchStats.Values = 0
-    weaponPatchStats.Attributes = 0
-    weaponPatchStats.Tables = 0
 end
 
 local function patchConfigTable(tbl)
@@ -7456,19 +7321,19 @@ local function patchConfigTable(tbl)
             patchConfigTable(value)
         elseif typeof(key) == "string" then
             if noRecoilEnabled and isRecoilKey(key) and typeof(value) == "number" then
-                patchConfigValue(tbl, key, 0)
+                pcall(function() tbl[key] = 0 end)
             elseif noShakeEnabled and isShakeKey(key) and typeof(value) == "number" then
-                patchConfigValue(tbl, key, 0)
+                pcall(function() tbl[key] = 0 end)
             elseif noShakeEnabled and isShakeKey(key) and typeof(value) == "boolean" then
-                patchConfigValue(tbl, key, false)
+                pcall(function() tbl[key] = false end)
             elseif noReloadEnabled and isReloadKey(key) then
                 if typeof(value) == "number" then
-                    patchConfigValue(tbl, key, 0)
+                    pcall(function() tbl[key] = 0 end)
                 elseif typeof(value) == "boolean" then
-                    patchConfigValue(tbl, key, false)
+                    pcall(function() tbl[key] = false end)
                 end
             elseif noReloadEnabled and isAmmoKey(key) and typeof(value) == "number" then
-                patchConfigValue(tbl, key, math.max(value, 999))
+                pcall(function() tbl[key] = math.max(value, 999) end)
             end
         end
     end
@@ -7533,26 +7398,11 @@ local function scanBallisticsAttributes(instance, source, result)
 
         if typeof(value) == "number" then
             recordBallisticCandidate(result, key, value, source .. "@Attributes")
-            if noRecoilEnabled and isRecoilKey(key) then
-                patchAttribute(instance, key, 0)
-            elseif noShakeEnabled and isShakeKey(key) then
-                patchAttribute(instance, key, 0)
-            elseif noReloadEnabled and isReloadKey(key) then
-                patchAttribute(instance, key, 0)
-            elseif noReloadEnabled and isAmmoKey(key) then
-                patchAttribute(instance, key, math.max(value, 999))
-            end
-        elseif typeof(value) == "boolean" then
-            if noShakeEnabled and isShakeKey(key) then
-                patchAttribute(instance, key, false)
-            elseif noReloadEnabled and isReloadKey(key) then
-                patchAttribute(instance, key, false)
-            end
         end
     end
 end
 
-local function scanWeaponBallistics(weapon, shouldPatchModules, includeRelatedStorage)
+local function scanWeaponBallistics(weapon, shouldPatchModules)
     local result = {
         Weapon = weapon and weapon.Name or "None",
         Speed = nil,
@@ -7613,68 +7463,6 @@ local function scanWeaponBallistics(weapon, shouldPatchModules, includeRelatedSt
         end
     end
 
-    if not includeRelatedStorage and not shouldPatchModules then
-        return result
-    end
-
-    local weaponKey = normalizeWeaponKey(weapon.Name)
-    local relatedScanned = 0
-
-    for _, item in ipairs(ReplicatedStorage:GetDescendants()) do
-        if relatedScanned >= 80 then
-            break
-        end
-
-        local itemKey = normalizeWeaponKey(item.Name)
-        local parentKey = item.Parent and normalizeWeaponKey(item.Parent.Name) or ""
-        local related = itemKey == weaponKey
-            or parentKey == weaponKey
-            or ((parentKey:find("weapon") or parentKey:find("gun") or parentKey:find("tool")) and #weaponKey > 3 and (itemKey:find(weaponKey, 1, true) or weaponKey:find(itemKey, 1, true)))
-
-        if related then
-            relatedScanned += 1
-            local source = "ReplicatedStorage." .. item.Name
-            scanBallisticsAttributes(item, source, result)
-
-            if item:IsA("NumberValue") or item:IsA("IntValue") then
-                currentWeaponData[source] = item.Value
-                result.Found += 1
-                recordBallisticCandidate(result, item.Name, item.Value, source)
-                if shouldPatchModules then
-                    if noRecoilEnabled and isRecoilKey(item.Name) then
-                        patchValueObject(item, 0)
-                    elseif noShakeEnabled and isShakeKey(item.Name) then
-                        patchValueObject(item, 0)
-                    elseif noReloadEnabled and isReloadKey(item.Name) then
-                        patchValueObject(item, 0)
-                    elseif noReloadEnabled and isAmmoKey(item.Name) then
-                        patchValueObject(item, math.max(item.Value, 999))
-                    end
-                end
-            elseif item:IsA("BoolValue") then
-                currentWeaponData[source] = item.Value
-                result.Found += 1
-                if shouldPatchModules then
-                    if noShakeEnabled and isShakeKey(item.Name) then
-                        patchValueObject(item, false)
-                    elseif noReloadEnabled and isReloadKey(item.Name) then
-                        patchValueObject(item, false)
-                    end
-                end
-            elseif item:IsA("ModuleScript") then
-                local ok, data = pcall(require, item)
-                if ok and typeof(data) == "table" then
-                    currentWeaponData[source] = data
-                    result.Found += 1
-                    if shouldPatchModules then
-                        patchConfigTable(data)
-                    end
-                    scanBallisticsTable(data, source, result, 1)
-                end
-            end
-        end
-    end
-
     return result
 end
 
@@ -7687,16 +7475,13 @@ local function updateBallisticsInfo()
         ballisticInfoParagraph:Set({
             Title = "Detected Ballistics",
             Content = string.format(
-                "Weapon: %s\nBullet Speed: %.0f stud/s\nBullet Drop: %s (scale %.2f)\nSource: %s\nData scanned: %d\nPatched: values %d | attrs %d | tables %d",
+                "Weapon: %s\nBullet Speed: %.0f stud/s\nBullet Drop: %s (scale %.2f)\nSource: %s\nData scanned: %d",
                 detectedBallistics.Weapon or "None",
                 bulletSpeed,
                 bulletDropEnabled and "ON" or "OFF",
                 bulletDropScale,
                 detectedBallistics.Source or "Manual/default",
-                detectedBallistics.Found or 0,
-                weaponPatchStats.Values,
-                weaponPatchStats.Attributes,
-                weaponPatchStats.Tables
+                detectedBallistics.Found or 0
             )
         })
     end)
@@ -7742,9 +7527,9 @@ local function applyBallisticResult(result, silent)
 end
 
 local function readWeaponData()
-    restoreWeaponPatches()
     currentWeapon = getEquippedWeapon()
     currentWeaponData = {}
+    table.clear(patchedWeaponValues)
 
     if not currentWeapon then
         detectedBallistics.Weapon = "None"
@@ -7755,18 +7540,10 @@ local function readWeaponData()
         return
     end
 
-    local result = scanWeaponBallistics(currentWeapon, true, true)
+    local result = scanWeaponBallistics(currentWeapon, true)
     applyBallisticResult(result, true)
-    _G.Chilly_CurrentWeaponData = currentWeaponData
 
-    notify("Chilly", string.format(
-        "Weapon dibaca: %s | data: %d | patched V:%d A:%d T:%d",
-        currentWeapon.Name,
-        result.Found,
-        weaponPatchStats.Values,
-        weaponPatchStats.Attributes,
-        weaponPatchStats.Tables
-    ))
+    notify("Chilly", "Weapon dibaca: " .. currentWeapon.Name .. " | data: " .. tostring(result.Found))
 end
 
 autoDetectBallistics = function(force)
@@ -7794,9 +7571,8 @@ autoDetectBallistics = function(force)
         return
     end
 
-    local result = scanWeaponBallistics(weapon, false, force == true)
+    local result = scanWeaponBallistics(weapon, false)
     applyBallisticResult(result, true)
-    _G.Chilly_CurrentWeaponData = currentWeaponData
 end
 
 local function applyWeaponAssist()
@@ -7808,47 +7584,7 @@ local function applyWeaponAssist()
         return
     end
 
-    for key, value in pairs(currentWeapon:GetAttributes()) do
-        if typeof(value) == "number" then
-            if noRecoilEnabled and isRecoilKey(key) then
-                patchAttribute(currentWeapon, key, 0)
-            elseif noShakeEnabled and isShakeKey(key) then
-                patchAttribute(currentWeapon, key, 0)
-            elseif noReloadEnabled and isReloadKey(key) then
-                patchAttribute(currentWeapon, key, 0)
-            elseif noReloadEnabled and isAmmoKey(key) then
-                patchAttribute(currentWeapon, key, math.max(value, 999))
-            end
-        elseif typeof(value) == "boolean" then
-            if noShakeEnabled and isShakeKey(key) then
-                patchAttribute(currentWeapon, key, false)
-            elseif noReloadEnabled and isReloadKey(key) then
-                patchAttribute(currentWeapon, key, false)
-            end
-        end
-    end
-
     for _, item in ipairs(currentWeapon:GetDescendants()) do
-        for key, value in pairs(item:GetAttributes()) do
-            if typeof(value) == "number" then
-                if noRecoilEnabled and isRecoilKey(key) then
-                    patchAttribute(item, key, 0)
-                elseif noShakeEnabled and isShakeKey(key) then
-                    patchAttribute(item, key, 0)
-                elseif noReloadEnabled and isReloadKey(key) then
-                    patchAttribute(item, key, 0)
-                elseif noReloadEnabled and isAmmoKey(key) then
-                    patchAttribute(item, key, math.max(value, 999))
-                end
-            elseif typeof(value) == "boolean" then
-                if noShakeEnabled and isShakeKey(key) then
-                    patchAttribute(item, key, false)
-                elseif noReloadEnabled and isReloadKey(key) then
-                    patchAttribute(item, key, false)
-                end
-            end
-        end
-
         if item:IsA("NumberValue") or item:IsA("IntValue") then
             if noRecoilEnabled and isRecoilKey(item.Name) then
                 patchValueObject(item, 0)
@@ -7875,58 +7611,25 @@ local function applyWeaponAssist()
 end
 
 local function syncPredictionControls()
-    if AimbotPredictionToggle then
-        AimbotPredictionToggle:Set(aimPredictionEnabled)
-    end
-    if PredictionStrengthSlider then
-        PredictionStrengthSlider:Set(math.floor(predictionStrength * 100 + 0.5))
-    end
-    if BulletSpeedSlider then
-        BulletSpeedSlider:Set(math.floor(bulletSpeed + 0.5))
-    end
-    if BulletDropToggle then
-        BulletDropToggle:Set(bulletDropEnabled)
-    end
-    if BulletDropScaleSlider then
-        BulletDropScaleSlider:Set(math.floor(bulletDropScale * 100 + 0.5))
-    end
-end
-
-local function applyBestPredictionFromWeapon()
-    autoDetectBallistics(true)
-
-    aimPredictionEnabled = true
-    predictionStrength = 1
-
-    if detectedBallistics.DropEnabled ~= nil then
-        bulletDropEnabled = detectedBallistics.DropEnabled == true
-    end
-
-    if detectedBallistics.DropScale then
-        bulletDropScale = math.clamp(detectedBallistics.DropScale, 0, 5)
-    end
-
-    if detectedBallistics.Speed and detectedBallistics.Speed > 0 then
-        bulletSpeed = detectedBallistics.Speed
-    end
-
-    syncPredictionControls()
-    updateBallisticsInfo()
+    if AimbotPredictionToggle then AimbotPredictionToggle:Set(aimPredictionEnabled) end
+    if PredictionStrengthSlider then PredictionStrengthSlider:Set(math.floor(predictionStrength * 100 + 0.5)) end
+    if BulletSpeedSlider then BulletSpeedSlider:Set(math.floor(bulletSpeed + 0.5)) end
+    if BulletDropToggle then BulletDropToggle:Set(bulletDropEnabled) end
+    if BulletDropScaleSlider then BulletDropScaleSlider:Set(math.floor(bulletDropScale * 100 + 0.5)) end
 end
 
 local function analyzePredictionSettings()
     Camera = workspace.CurrentCamera
-    applyBestPredictionFromWeapon()
+    autoDetectBallistics(true)
+
+    aimPredictionEnabled = true
+    predictionStrength = 1
+    syncPredictionControls()
 
     local player, part = getCurrentAimTarget()
 
     if not player or not part then
-        notify("Chilly", string.format(
-            "Prediction auto-set dari weapon data: speed %.0f | drop %s %.2f. Tidak ada target aktif untuk preview.",
-            bulletSpeed,
-            bulletDropEnabled and "ON" or "OFF",
-            bulletDropScale
-        ))
+        notify("Chilly", string.format("Prediction auto-set: speed %.0f | drop %s %.2f. Tidak ada target aktif untuk preview.", bulletSpeed, bulletDropEnabled and "ON" or "OFF", bulletDropScale))
         return
     end
 
@@ -8458,7 +8161,7 @@ MovementTab:CreateButton({
 
 CombatTab:CreateSection("Aimbot")
 
-CombatTab:CreateToggle({
+AimbotPredictionToggle = CombatTab:CreateToggle({
     Name = "Aimbot",
     CurrentValue = false,
     Flag = "Chilly_Aimbot",
@@ -8471,7 +8174,7 @@ CombatTab:CreateToggle({
     end
 })
 
-CombatTab:CreateSlider({
+PredictionStrengthSlider = CombatTab:CreateSlider({
     Name = "Aimbot FOV",
     Range = {30, 500},
     Increment = 5,
@@ -8511,7 +8214,7 @@ CombatTab:CreateSlider({
     end
 })
 
-AimbotPredictionToggle = CombatTab:CreateToggle({
+CombatTab:CreateToggle({
     Name = "Aimbot Prediction",
     CurrentValue = false,
     Flag = "Chilly_AimbotPrediction",
@@ -8520,7 +8223,7 @@ AimbotPredictionToggle = CombatTab:CreateToggle({
     end
 })
 
-PredictionStrengthSlider = CombatTab:CreateSlider({
+CombatTab:CreateSlider({
     Name = "Prediction Strength",
     Range = {0, 200},
     Increment = 5,
@@ -8588,7 +8291,7 @@ CombatTab:CreateButton({
 pcall(function()
     ballisticInfoParagraph = CombatTab:CreateParagraph({
         Title = "Detected Ballistics",
-        Content = "Weapon: None\nBullet Speed: 900 stud/s\nBullet Drop: OFF (scale 1.00)\nSource: Manual/default\nData scanned: 0\nPatched: values 0 | attrs 0 | tables 0"
+        Content = "Weapon: None\nBullet Speed: 900 stud/s\nBullet Drop: OFF (scale 1.00)\nSource: Manual/default\nData scanned: 0"
     })
     updateBallisticsInfo()
 end)
@@ -8683,17 +8386,13 @@ CombatTab:CreateButton({
     end
 })
 
-SilentAimToggle = CombatTab:CreateToggle({
+CombatTab:CreateToggle({
     Name = "Silent Aim",
     CurrentValue = false,
     Flag = "Chilly_SilentAim",
     Callback = function(value)
         silentAimEnabled = value
-
-        if value then
-            local ok, message = installSilentAimHook()
-            notify("Chilly", ok and ("Silent Aim: " .. message) or ("Silent Aim fallback only: " .. message))
-        end
+        notify("Chilly", value and "Silent Aim ON. Gun harus membaca _G.Chilly_GetSilentAimTarget agar efeknya aktif." or "Silent Aim OFF.")
     end
 })
 
@@ -8703,13 +8402,7 @@ CombatTab:CreateToggle({
     Flag = "Chilly_NoRecoil",
     Callback = function(value)
         noRecoilEnabled = value
-        if value then
-            readWeaponData()
-        elseif not noShakeEnabled and not noReloadEnabled then
-            restoreWeaponPatches()
-        else
-            readWeaponData()
-        end
+        if value then readWeaponData() end
     end
 })
 
@@ -8719,13 +8412,7 @@ CombatTab:CreateToggle({
     Flag = "Chilly_NoShake",
     Callback = function(value)
         noShakeEnabled = value
-        if value then
-            readWeaponData()
-        elseif not noRecoilEnabled and not noReloadEnabled then
-            restoreWeaponPatches()
-        else
-            readWeaponData()
-        end
+        if value then readWeaponData() end
     end
 })
 
@@ -8735,13 +8422,7 @@ CombatTab:CreateToggle({
     Flag = "Chilly_NoReload",
     Callback = function(value)
         noReloadEnabled = value
-        if value then
-            readWeaponData()
-        elseif not noRecoilEnabled and not noShakeEnabled then
-            restoreWeaponPatches()
-        else
-            readWeaponData()
-        end
+        if value then readWeaponData() end
     end
 })
 
