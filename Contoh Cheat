@@ -1,3 +1,703 @@
+-- Chilly Rebuilt Stable
+-- Rebuilt from the old example script for authorized private Roblox testing.
+
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+
+print("[Chilly] Rebuilt stable booting...")
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local VirtualInputManager
+
+pcall(function()
+    VirtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local uiOk, Chilly = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Chilly%20UI"))()
+end)
+
+if not uiOk or not Chilly then
+    warn("[Chilly] UI gagal diload:", Chilly)
+    return
+end
+
+pcall(function()
+    local assets = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/refs/heads/main/Assets"))()
+    if Chilly.LoadAssets then
+        Chilly:LoadAssets(assets)
+    end
+end)
+
+local Window = Chilly:CreateWindow({
+    Name = "Chilly",
+    Icon = "rocket",
+    LoadingTitle = "Chilly",
+    LoadingSubtitle = "Rebuilt Stable",
+    ShowText = "Chilly",
+    Theme = "Graphite",
+    ToggleUIKeybind = "K",
+    ConfigurationSaving = {
+        Enabled = false,
+        FolderName = "Chilly",
+        FileName = "Chilly_Rebuilt_Stable"
+    },
+    KeySystem = false
+})
+
+if not Window then
+    warn("[Chilly] Window gagal dibuat.")
+    return
+end
+
+print("[Chilly] Window created.")
+
+local MovementTab = Window:CreateTab("Movement", "movement")
+local VisualTab = Window:CreateTab("Visual", "visual")
+local AutoClickTab = Window:CreateTab("Auto Click", "autoclick")
+local ExtraTab = Window:CreateTab("Extra", "extra")
+
+local walkSpeed = 16
+local jumpPower = 50
+local flyEnabled = false
+local flySpeed = 60
+local noclipEnabled = false
+local flyVelocity
+local flyGyro
+local manualCoordinateText = ""
+local saveCoordinateName = "Coordinate"
+local savedCoordinates = {}
+local savedNames = {"None"}
+local selectedSavedCoordinate = "None"
+
+local espEnabled = false
+local espBoxes = false
+local espNames = false
+local espDistance = false
+local espMaxDistance = 750
+local espColor = Color3.fromRGB(80, 220, 255)
+local espObjects = {}
+
+local autoClickEnabled = false
+local autoClickInterval = 0.05
+local autoClickAccumulator = 0
+
+local lowGraphicsEnabled = false
+local originalLighting = {}
+local originalMaterials = {}
+
+local keys = {
+    W = false,
+    A = false,
+    S = false,
+    D = false,
+    Up = false,
+    Down = false
+}
+
+local function notify(title, content)
+    pcall(function()
+        Chilly:Notify({
+            Title = title,
+            Content = content,
+            Duration = 4,
+            Image = "bell"
+        })
+    end)
+end
+
+local function getCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function getHumanoid()
+    local character = getCharacter()
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRoot()
+    local character = getCharacter()
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function applyWalkSpeed()
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid.WalkSpeed = walkSpeed
+    end
+end
+
+local function applyJumpPower()
+    local humanoid = getHumanoid()
+    if humanoid then
+        pcall(function()
+            humanoid.UseJumpPower = true
+            humanoid.JumpPower = jumpPower
+        end)
+    end
+end
+
+local function getCoordinateString()
+    local root = getRoot()
+    if not root then
+        return nil
+    end
+
+    local position = root.Position
+    return string.format("%.2f, %.2f, %.2f", position.X, position.Y, position.Z)
+end
+
+local function parseVector3(text)
+    local nums = {}
+
+    for raw in string.gmatch(tostring(text or ""), "[-+]?%d*%.?%d+") do
+        local num = tonumber(raw)
+        if num then
+            table.insert(nums, num)
+        end
+        if #nums >= 3 then
+            break
+        end
+    end
+
+    if #nums < 3 then
+        return nil
+    end
+
+    return Vector3.new(nums[1], nums[2], nums[3])
+end
+
+local function teleportToCFrame(cframe)
+    local character = getCharacter()
+    local root = getRoot()
+
+    if not root then
+        notify("Chilly", "HumanoidRootPart tidak ditemukan.")
+        return
+    end
+
+    pcall(function()
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end)
+
+    local ok = pcall(function()
+        character:PivotTo(cframe)
+    end)
+
+    if not ok then
+        root.CFrame = cframe
+    end
+end
+
+local function rebuildSavedNames()
+    local names = {}
+    for name in pairs(savedCoordinates) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    savedNames = #names > 0 and names or {"None"}
+end
+
+local function createFlyParts()
+    local root = getRoot()
+    local humanoid = getHumanoid()
+    if not root then
+        return
+    end
+
+    if flyVelocity then
+        flyVelocity:Destroy()
+    end
+    if flyGyro then
+        flyGyro:Destroy()
+    end
+
+    if humanoid then
+        humanoid.PlatformStand = true
+    end
+
+    flyVelocity = Instance.new("BodyVelocity")
+    flyVelocity.Name = "ChillyFlyVelocity"
+    flyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+    flyVelocity.Velocity = Vector3.zero
+    flyVelocity.Parent = root
+
+    flyGyro = Instance.new("BodyGyro")
+    flyGyro.Name = "ChillyFlyGyro"
+    flyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+    flyGyro.P = 90000
+    flyGyro.CFrame = root.CFrame
+    flyGyro.Parent = root
+end
+
+local function stopFly()
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid.PlatformStand = false
+    end
+    if flyVelocity then
+        flyVelocity:Destroy()
+        flyVelocity = nil
+    end
+    if flyGyro then
+        flyGyro:Destroy()
+        flyGyro = nil
+    end
+end
+
+local function getFlyDirection()
+    Camera = workspace.CurrentCamera
+    local direction = Vector3.zero
+
+    if Camera then
+        if keys.W then direction += Camera.CFrame.LookVector end
+        if keys.S then direction -= Camera.CFrame.LookVector end
+        if keys.A then direction -= Camera.CFrame.RightVector end
+        if keys.D then direction += Camera.CFrame.RightVector end
+    end
+
+    if keys.Up then
+        direction += Vector3.new(0, 1, 0)
+    end
+    if keys.Down then
+        direction -= Vector3.new(0, 1, 0)
+    end
+
+    return direction.Magnitude > 0 and direction.Unit or Vector3.zero
+end
+
+local function resetCharacter()
+    local humanoid = getHumanoid()
+    if humanoid then
+        humanoid.Health = 0
+        notify("Chilly", "Character reset.")
+    end
+end
+
+local function getEspObject(player)
+    if not Drawing or not Drawing.new then
+        return nil
+    end
+
+    if espObjects[player] then
+        return espObjects[player]
+    end
+
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Filled = false
+    box.Visible = false
+
+    local name = Drawing.new("Text")
+    name.Center = true
+    name.Outline = true
+    name.Size = 13
+    name.Visible = false
+
+    local object = {
+        Box = box,
+        Name = name
+    }
+    espObjects[player] = object
+    return object
+end
+
+local function hideEspObject(object)
+    if not object then
+        return
+    end
+    object.Box.Visible = false
+    object.Name.Visible = false
+end
+
+local function clearEsp()
+    for _, object in pairs(espObjects) do
+        pcall(function()
+            object.Box:Remove()
+            object.Name:Remove()
+        end)
+    end
+    table.clear(espObjects)
+end
+
+local function updateEsp()
+    Camera = workspace.CurrentCamera
+    if not Camera then
+        return
+    end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player == LocalPlayer then
+            continue
+        end
+
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+
+        if not espEnabled or not character or not humanoid or humanoid.Health <= 0 or not root then
+            local object = espObjects[player]
+            hideEspObject(object)
+            continue
+        end
+
+        local object = getEspObject(player)
+        if not object then
+            continue
+        end
+
+        local localRoot = getRoot()
+        local distance = localRoot and (localRoot.Position - root.Position).Magnitude or 0
+        if distance > espMaxDistance then
+            hideEspObject(object)
+            continue
+        end
+
+        local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+        if not onScreen or screenPos.Z <= 0 then
+            hideEspObject(object)
+            continue
+        end
+
+        local scale = math.clamp(1 / (screenPos.Z * 0.002), 0.7, 2.4)
+        local width = 34 * scale
+        local height = 56 * scale
+        local topLeft = Vector2.new(screenPos.X - width / 2, screenPos.Y - height / 2)
+
+        object.Box.Color = espColor
+        object.Box.Size = Vector2.new(width, height)
+        object.Box.Position = topLeft
+        object.Box.Visible = espBoxes
+
+        object.Name.Color = espColor
+        object.Name.Position = Vector2.new(screenPos.X, topLeft.Y - 16)
+        object.Name.Text = espDistance and string.format("%s [%dm]", player.Name, distance) or player.Name
+        object.Name.Visible = espNames
+    end
+end
+
+local function setLowGraphics(enabled)
+    lowGraphicsEnabled = enabled
+
+    if enabled then
+        if not originalLighting.Brightness then
+            originalLighting = {
+                Brightness = Lighting.Brightness,
+                GlobalShadows = Lighting.GlobalShadows,
+                FogEnd = Lighting.FogEnd,
+                Technology = Lighting.Technology
+            }
+        end
+
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        pcall(function()
+            Lighting.Technology = Enum.Technology.Compatibility
+        end)
+
+        for _, instance in ipairs(workspace:GetDescendants()) do
+            if instance:IsA("BasePart") and not originalMaterials[instance] then
+                originalMaterials[instance] = {
+                    Material = instance.Material,
+                    Reflectance = instance.Reflectance
+                }
+                instance.Material = Enum.Material.SmoothPlastic
+                instance.Reflectance = 0
+            elseif instance:IsA("Decal") or instance:IsA("Texture") then
+                instance.Transparency = 1
+            end
+        end
+        notify("Chilly", "Low Graphics ON.")
+    else
+        if originalLighting.Brightness then
+            Lighting.Brightness = originalLighting.Brightness
+            Lighting.GlobalShadows = originalLighting.GlobalShadows
+            Lighting.FogEnd = originalLighting.FogEnd
+            pcall(function()
+                Lighting.Technology = originalLighting.Technology
+            end)
+        end
+
+        for instance, data in pairs(originalMaterials) do
+            if instance and instance.Parent then
+                instance.Material = data.Material
+                instance.Reflectance = data.Reflectance
+            end
+        end
+        table.clear(originalMaterials)
+        notify("Chilly", "Low Graphics OFF.")
+    end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.W then keys.W = true end
+    if input.KeyCode == Enum.KeyCode.A then keys.A = true end
+    if input.KeyCode == Enum.KeyCode.S then keys.S = true end
+    if input.KeyCode == Enum.KeyCode.D then keys.D = true end
+    if input.KeyCode == Enum.KeyCode.Space then keys.Up = true end
+    if input.KeyCode == Enum.KeyCode.LeftControl then keys.Down = true end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.W then keys.W = false end
+    if input.KeyCode == Enum.KeyCode.A then keys.A = false end
+    if input.KeyCode == Enum.KeyCode.S then keys.S = false end
+    if input.KeyCode == Enum.KeyCode.D then keys.D = false end
+    if input.KeyCode == Enum.KeyCode.Space then keys.Up = false end
+    if input.KeyCode == Enum.KeyCode.LeftControl then keys.Down = false end
+end)
+
+RunService.Stepped:Connect(function()
+    if noclipEnabled then
+        local character = LocalPlayer.Character
+        if character then
+            for _, item in ipairs(character:GetDescendants()) do
+                if item:IsA("BasePart") then
+                    item.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    if flyEnabled then
+        local root = getRoot()
+        if root and (not flyVelocity or not flyGyro or flyVelocity.Parent ~= root) then
+            createFlyParts()
+        end
+        if flyVelocity and flyGyro and Camera then
+            flyVelocity.Velocity = getFlyDirection() * flySpeed
+            flyGyro.CFrame = Camera.CFrame
+        end
+    end
+
+    if autoClickEnabled and VirtualInputManager then
+        autoClickAccumulator += deltaTime
+        if autoClickAccumulator >= autoClickInterval then
+            autoClickAccumulator = 0
+            local mouse = LocalPlayer:GetMouse()
+            VirtualInputManager:SendMouseButtonEvent(mouse.X, mouse.Y, 0, true, game, 0)
+            VirtualInputManager:SendMouseButtonEvent(mouse.X, mouse.Y, 0, false, game, 0)
+        end
+    end
+
+    updateEsp()
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.4)
+    applyWalkSpeed()
+    applyJumpPower()
+    if flyEnabled then
+        createFlyParts()
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    local object = espObjects[player]
+    if object then
+        pcall(function()
+            object.Box:Remove()
+            object.Name:Remove()
+        end)
+        espObjects[player] = nil
+    end
+end)
+
+MovementTab:CreateSection("Basic Movement")
+
+MovementTab:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 250},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Flag = "Chilly_WalkSpeed",
+    Callback = function(value)
+        walkSpeed = value
+        applyWalkSpeed()
+    end
+})
+
+MovementTab:CreateSlider({
+    Name = "Jump Boost",
+    Range = {50, 250},
+    Increment = 1,
+    Suffix = "Power",
+    CurrentValue = 50,
+    Flag = "Chilly_JumpPower",
+    Callback = function(value)
+        jumpPower = value
+        applyJumpPower()
+    end
+})
+
+MovementTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "Chilly_Fly",
+    Callback = function(value)
+        flyEnabled = value
+        if flyEnabled then
+            createFlyParts()
+        else
+            stopFly()
+        end
+    end
+})
+
+MovementTab:CreateSlider({
+    Name = "Fly Speed",
+    Range = {10, 300},
+    Increment = 5,
+    Suffix = "Speed",
+    CurrentValue = 60,
+    Flag = "Chilly_FlySpeed",
+    Callback = function(value)
+        flySpeed = value
+    end
+})
+
+MovementTab:CreateToggle({
+    Name = "Noclip",
+    CurrentValue = false,
+    Flag = "Chilly_Noclip",
+    Callback = function(value)
+        noclipEnabled = value
+    end
+})
+
+MovementTab:CreateSection("Teleport")
+
+local CoordinateOutput = MovementTab:CreateInput({
+    Name = "Current Coordinate",
+    CurrentValue = "",
+    PlaceholderText = "Klik Get Coordinate",
+    RemoveTextAfterFocusLost = false,
+    Flag = "Chilly_CurrentCoordinate",
+    Callback = function() end
+})
+
+MovementTab:CreateButton({
+    Name = "Get Coordinate",
+    Callback = function()
+        local coord = getCoordinateString()
+        if not coord then
+            notify("Chilly", "Coordinate gagal diambil.")
+            return
+        end
+
+        CoordinateOutput:Set(coord)
+        manualCoordinateText = coord
+        if setclipboard then
+            pcall(function()
+                setclipboard(coord)
+            end)
+        end
+        notify("Chilly", "Coordinate: " .. coord)
+    end
+})
+
+MovementTab:CreateInput({
+    Name = "Save Name",
+    CurrentValue = "Coordinate",
+    PlaceholderText = "Nama coordinate",
+    RemoveTextAfterFocusLost = false,
+    Flag = "Chilly_SaveName",
+    Callback = function(text)
+        saveCoordinateName = tostring(text or "")
+    end
+})
+
+local SavedDropdown
+
+MovementTab:CreateButton({
+    Name = "Save Coordinate",
+    Callback = function()
+        local root = getRoot()
+        if not root then
+            notify("Chilly", "Coordinate gagal disimpan.")
+            return
+        end
+
+        local name = saveCoordinateName
+        if not name or name == "" then
+            name = "Coordinate " .. tostring(os.time())
+        end
+
+        savedCoordinates[name] = root.CFrame
+        rebuildSavedNames()
+
+        if SavedDropdown then
+            SavedDropdown:Refresh(savedNames)
+            SavedDropdown:Set(name)
+        end
+
+        notify("Chilly", "Saved: " .. name)
+    end
+})
+
+SavedDropdown = MovementTab:CreateDropdown({
+    Name = "Saved Coordinates",
+    Options = savedNames,
+    CurrentOption = "None",
+    MultipleOptions = false,
+    Flag = "Chilly_SavedCoordinates",
+    Callback = function(option)
+        selectedSavedCoordinate = typeof(option) == "table" and option[1] or option
+    end
+})
+
+MovementTab:CreateButton({
+    Name = "Teleport To Saved Coordinate",
+    Callback = function()
+        local cframe = savedCoordinates[selectedSavedCoordinate]
+        if not cframe then
+            notify("Chilly", "Pilih coordinate yang sudah disimpan.")
+            return
+        end
+        teleportToCFrame(cframe)
+        notify("Chilly", "Teleported: " .. selectedSavedCoordinate)
+    end
+})
+
+MovementTab:CreateInput({
+    Name = "Teleport Coordinate",
+    CurrentValue = "",
+    PlaceholderText = "Contoh: 0, 10, 0",
+    RemoveTextAfterFocusLost = false,
+    Flag = "Chilly_ManualCoordinate",
+    Callback = function(text)
+        manualCoordinateText = tostring(text or "")
+    end
+})
+
+MovementTab:CreateButton({
+    Name = "Teleport To Coordinate",
+    Callback = function()
+        local position = parseVector3(manualCoordinateText)
+        if not position then
+            notify("Chilly", "Format coordinate salah. Pakai: X, Y, Z")
+            return
+        end
+        teleportToCFrame(CFrame.new(position))
+        notify("Chilly", "Teleported.")
+    end
+})
+
 VisualTab:CreateSection("ESP")
 
 VisualTab:CreateToggle({
