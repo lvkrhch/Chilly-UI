@@ -155,22 +155,6 @@ local function getParent()
     if not playerGui and LocalPlayer then
         playerGui = LocalPlayer:WaitForChild("PlayerGui")
     end
-
-    local ok, coreGui = pcall(function()
-        return game:GetService("CoreGui")
-    end)
-    if ok and coreGui then
-        local probe = Instance.new("ScreenGui")
-        probe.Name = "ChillyParentProbe"
-        local canUseCoreGui = pcall(function()
-            probe.Parent = coreGui
-        end)
-        probe:Destroy()
-        if canUseCoreGui then
-            return coreGui
-        end
-    end
-
     return playerGui
 end
 
@@ -906,6 +890,8 @@ function Chilly:CreateWindow(options)
         Name = "ChillyByKhai",
         ResetOnSpawn = false,
         IgnoreGuiInset = true,
+        Enabled = true,
+        DisplayOrder = 999999,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         Parent = getParent(),
     })
@@ -5663,7 +5649,8 @@ end
 local Rayfield = Chilly
 print("[Chilly] Bundled UI loaded. Starting full script...")
 
-local Window = Rayfield:CreateWindow({
+local windowOk, Window = pcall(function()
+    return Rayfield:CreateWindow({
     Name = "Chilly",
     Icon = 0,
     LoadingTitle = "Chilly",
@@ -5685,6 +5672,12 @@ local Window = Rayfield:CreateWindow({
     },
     KeySystem = false
 })
+end)
+
+if not windowOk or not Window then
+    warn("[Chilly] Window gagal dibuat:", Window)
+    return
+end
 
 local MovementTab = Window:CreateTab("Movement", 0)
 local CombatTab = Window:CreateTab("Combat", 0)
@@ -5765,8 +5758,8 @@ local espScale = 1
 local espMaxDistance = 750
 local espAutoTeamColor = false
 local espColor = Color3.fromRGB(80, 220, 255)
-local espCacheRate = 1 / 12
-local espUpdateInterval = 1 / 15
+local espCacheRate = 1 / 20
+local espUpdateInterval = 1 / 30
 local espLastUpdate = 0
 local teamSystemCacheTime = 0
 local teamSystemCacheValue = false
@@ -8773,4 +8766,3 @@ ExtraTab:CreateButton({
 applyWalkSpeed()
 applyJumpBoost()
 notify("Chilly", "Fixed loaded. Toggle GUI: K")
-
