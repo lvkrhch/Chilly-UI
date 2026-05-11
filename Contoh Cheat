@@ -1,5 +1,5 @@
 -- Chilly Fixed
--- Rayfield dev/admin movement, combat test tools, and professional proportional ESP.
+-- Chilly UI dev/admin movement, combat test tools, and professional proportional ESP.
 -- Intended for your own Roblox experience or authorized private testing.
 
 if not game:IsLoaded() then
@@ -21,16 +21,19 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Chilly%20UI"))()
+pcall(function()
+    local ChillyAssets = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Assets"))()
+    Chilly:LoadAssets(ChillyAssets)
+end)
 
-local Window = Rayfield:CreateWindow({
+local Window = Chilly:CreateProfessionalWindow({
     Name = "Chilly",
-    Icon = 0,
+    Icon = "rocket",
     LoadingTitle = "Chilly",
     LoadingSubtitle = "Fixed Dev Tools",
     ShowText = "Chilly",
-    Theme = "Default",
+    Theme = "Graphite",
     ToggleUIKeybind = "K",
-    DisableRayfieldPrompts = false,
     DisableBuildWarnings = false,
     ConfigurationSaving = {
         Enabled = true,
@@ -45,11 +48,11 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false
 })
 
-local MovementTab = Window:CreateTab("Movement", 0)
-local CombatTab = Window:CreateTab("Combat", 0)
-local VisualTab = Window:CreateTab("Visual", 0)
-local AutoClickTab = Window:CreateTab("Auto Click", 0)
-local ExtraTab = Window:CreateTab("Extra", 0)
+local MovementTab = Window:CreateTab("Movement", "movement")
+local CombatTab = Window:CreateTab("Combat", "target")
+local VisualTab = Window:CreateTab("Visual", "visual")
+local AutoClickTab = Window:CreateTab("Auto Click", "autoclick")
+local ExtraTab = Window:CreateTab("Extra", "extra")
 
 local antiKickFriendly = true
 local autoSafetyGuard = true
@@ -183,7 +186,7 @@ local detectedBallistics = {
 
 local function notify(title, content)
     pcall(function()
-        Rayfield:Notify({
+        Chilly:Notify({
             Title = title,
             Content = content,
             Duration = 4,
