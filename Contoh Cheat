@@ -23,10 +23,12 @@ local Camera = workspace.CurrentCamera
 local Chilly = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Chilly%20UI"))()
 pcall(function()
     local ChillyAssets = loadstring(game:HttpGet("https://raw.githubusercontent.com/lvkrhch/Chilly-UI/main/Assets"))()
-    Chilly:LoadAssets(ChillyAssets)
+    if Chilly and Chilly.LoadAssets then
+        Chilly:LoadAssets(ChillyAssets)
+    end
 end)
 
-local Window = Chilly:CreateProfessionalWindow({
+local Window = Chilly:CreateWindow({
     Name = "Chilly",
     Icon = "rocket",
     LoadingTitle = "Chilly",
