@@ -1,5 +1,5 @@
 -- Chilly Fixed
--- Chilly UI dev/admin movement, combat test tools, and professional proportional ESP.
+-- Chilly UI migration with Rayfield-compatible calls kept stable.
 -- Intended for your own Roblox experience or authorized private testing.
 
 if not game:IsLoaded() then
@@ -28,14 +28,17 @@ pcall(function()
     end
 end)
 
-local Window = Chilly:CreateWindow({
+local Rayfield = Chilly
+
+local Window = Rayfield:CreateWindow({
     Name = "Chilly",
-    Icon = "rocket",
+    Icon = 0,
     LoadingTitle = "Chilly",
     LoadingSubtitle = "Fixed Dev Tools",
     ShowText = "Chilly",
-    Theme = "Graphite",
+    Theme = "Default",
     ToggleUIKeybind = "K",
+    DisableRayfieldPrompts = false,
     DisableBuildWarnings = false,
     ConfigurationSaving = {
         Enabled = true,
@@ -50,11 +53,11 @@ local Window = Chilly:CreateWindow({
     KeySystem = false
 })
 
-local MovementTab = Window:CreateTab("Movement", "movement")
-local CombatTab = Window:CreateTab("Combat", "target")
-local VisualTab = Window:CreateTab("Visual", "visual")
-local AutoClickTab = Window:CreateTab("Auto Click", "autoclick")
-local ExtraTab = Window:CreateTab("Extra", "extra")
+local MovementTab = Window:CreateTab("Movement", 0)
+local CombatTab = Window:CreateTab("Combat", 0)
+local VisualTab = Window:CreateTab("Visual", 0)
+local AutoClickTab = Window:CreateTab("Auto Click", 0)
+local ExtraTab = Window:CreateTab("Extra", 0)
 
 local antiKickFriendly = true
 local autoSafetyGuard = true
@@ -188,7 +191,7 @@ local detectedBallistics = {
 
 local function notify(title, content)
     pcall(function()
-        Chilly:Notify({
+        Rayfield:Notify({
             Title = title,
             Content = content,
             Duration = 4,
