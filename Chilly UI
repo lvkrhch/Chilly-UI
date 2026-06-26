@@ -1,4 +1,4 @@
--- Chilly UI Enhanced by Khai + Codex
+-- Chilly UI Enhanced by Khai
 -- Professional, lightweight Roblox UI library with a Rayfield-compatible API.
 
 local Chilly = {
