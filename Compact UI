@@ -1,0 +1,1258 @@
+-- Chilly UI Compact
+-- Shorter Rayfield-style Roblox UI library. Core API kept, decorative bloat removed.
+
+local Chilly = {
+    Name = "Chilly",
+    Version = "2.1.0-compact",
+    Flags = {},
+    Themes = {},
+    Windows = {},
+    Connections = {},
+    IconCatalog = {},
+    ToggleUIKeybind = Enum.KeyCode.Insert,
+    OverlayDisplayOrder = 2147483647,
+}
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local function call(fn, ...)
+    if type(fn) == "function" then
+        local ok, err = pcall(fn, ...)
+        if not ok then
+            warn("[Chilly] callback error:", err)
+        end
+    end
+end
+
+local function make(className, props, children)
+    local item = Instance.new(className)
+    for key, value in pairs(props or {}) do
+        item[key] = value
+    end
+    for _, child in ipairs(children or {}) do
+        child.Parent = item
+    end
+    return item
+end
+
+local function tween(item, props, time)
+    local info = TweenInfo.new(time or 0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    local created = TweenService:Create(item, info, props)
+    created:Play()
+    return created
+end
+
+local function addCorner(parent, radius)
+    make("UICorner", {CornerRadius = UDim.new(0, radius or 6), Parent = parent})
+end
+
+local function addStroke(parent, color, alpha)
+    make("UIStroke", {
+        Color = color,
+        Transparency = alpha or 0,
+        Thickness = 1,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        Parent = parent,
+    })
+end
+
+local function canParentToCoreGui()
+    local ok, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if not ok or not coreGui then
+        return false, nil
+    end
+
+    local probe = Instance.new("ScreenGui")
+    probe.Name = "ChillyOverlayProbe"
+    local canUseCore = pcall(function()
+        probe.Parent = coreGui
+    end)
+    probe:Destroy()
+    return canUseCore, coreGui
+end
+
+local function getParent(preferPlayerGui)
+    if not preferPlayerGui then
+        local canUseCore, coreGui = canParentToCoreGui()
+        if canUseCore then
+            return coreGui
+        end
+    end
+
+    if LocalPlayer then
+        local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if playerGui then
+            return playerGui
+        end
+    end
+
+    return game:GetService("CoreGui")
+end
+
+local function raiseOverlay(screen, displayOrder)
+    screen.DisplayOrder = displayOrder or Chilly.OverlayDisplayOrder
+    pcall(function()
+        screen.OnTopOfCoreBlur = true
+    end)
+    pcall(function()
+        screen.ScreenInsets = Enum.ScreenInsets.None
+    end)
+    pcall(function()
+        screen.SafeAreaCompatibility = Enum.SafeAreaCompatibility.None
+    end)
+end
+
+local function connect(owner, signal, fn)
+    local connection = signal:Connect(fn)
+    table.insert(owner.Connections, connection)
+    return connection
+end
+
+local function normalizeKey(key)
+    if typeof(key) == "EnumItem" then
+        return key
+    end
+    if type(key) == "string" then
+        return Enum.KeyCode[key] or Enum.UserInputType[key]
+    end
+    return Enum.KeyCode.Unknown
+end
+
+local function encode(value)
+    local ok, result = pcall(function()
+        return HttpService:JSONEncode(value)
+    end)
+    return ok and result or "{}"
+end
+
+local function decode(text)
+    local ok, result = pcall(function()
+        return HttpService:JSONDecode(text)
+    end)
+    return ok and type(result) == "table" and result or {}
+end
+
+local function canUse(name)
+    local env = typeof(getgenv) == "function" and getgenv() or _G
+    return type(env[name]) == "function" and env[name]
+end
+
+local function clampStep(value, min, max, step)
+    value = math.clamp(tonumber(value) or min, min, max)
+    step = tonumber(step) or 1
+    if step > 0 then
+        value = math.floor((value - min) / step + 0.5) * step + min
+    end
+    return math.clamp(value, min, max)
+end
+
+local function asTextList(value)
+    if type(value) ~= "table" then
+        return {}
+    end
+    local list = {}
+    for _, item in ipairs(value) do
+        table.insert(list, tostring(item))
+    end
+    return list
+end
+
+local baseTheme = {
+    Background = Color3.fromRGB(15, 18, 24),
+    Panel = Color3.fromRGB(24, 29, 38),
+    Panel2 = Color3.fromRGB(31, 37, 48),
+    Stroke = Color3.fromRGB(54, 64, 78),
+    Text = Color3.fromRGB(238, 243, 248),
+    Muted = Color3.fromRGB(160, 171, 184),
+    Accent = Color3.fromRGB(70, 145, 255),
+    AccentText = Color3.fromRGB(255, 255, 255),
+    Success = Color3.fromRGB(64, 196, 127),
+    Warning = Color3.fromRGB(245, 190, 85),
+    Danger = Color3.fromRGB(240, 88, 88),
+}
+
+Chilly.ThemePresets = {
+    Graphite = baseTheme,
+    Slate = {
+        Background = Color3.fromRGB(18, 22, 28),
+        Panel = Color3.fromRGB(28, 34, 42),
+        Panel2 = Color3.fromRGB(37, 44, 54),
+        Stroke = Color3.fromRGB(64, 74, 88),
+        Text = Color3.fromRGB(242, 246, 250),
+        Muted = Color3.fromRGB(166, 176, 190),
+        Accent = Color3.fromRGB(90, 170, 255),
+        AccentText = Color3.fromRGB(255, 255, 255),
+        Success = Color3.fromRGB(64, 196, 127),
+        Warning = Color3.fromRGB(245, 190, 85),
+        Danger = Color3.fromRGB(240, 88, 88),
+    },
+    Studio = {
+        Background = Color3.fromRGB(12, 14, 18),
+        Panel = Color3.fromRGB(22, 24, 29),
+        Panel2 = Color3.fromRGB(32, 35, 42),
+        Stroke = Color3.fromRGB(55, 60, 72),
+        Text = Color3.fromRGB(240, 240, 240),
+        Muted = Color3.fromRGB(165, 169, 178),
+        Accent = Color3.fromRGB(0, 170, 255),
+        AccentText = Color3.fromRGB(255, 255, 255),
+        Success = Color3.fromRGB(72, 190, 120),
+        Warning = Color3.fromRGB(238, 190, 70),
+        Danger = Color3.fromRGB(230, 75, 75),
+    },
+}
+
+local function buildTheme(theme)
+    local result = {}
+    local source = type(theme) == "string" and Chilly.Themes[theme] or theme
+    for key, value in pairs(baseTheme) do
+        result[key] = value
+    end
+    for key, value in pairs(source or {}) do
+        result[key] = value
+    end
+    return result
+end
+
+function Chilly:CreateTheme(name, overrides)
+    self.Themes[name] = buildTheme(overrides or self.ThemePresets[name])
+    return self.Themes[name]
+end
+
+Chilly:CreateTheme("Graphite", Chilly.ThemePresets.Graphite)
+Chilly:CreateTheme("Slate", Chilly.ThemePresets.Slate)
+Chilly:CreateTheme("Studio", Chilly.ThemePresets.Studio)
+
+local Window = {}
+Window.__index = Window
+
+local Tab = {}
+Tab.__index = Tab
+
+local function buttonLike(parent, theme, text, height)
+    local item = make("TextButton", {
+        AutoButtonColor = false,
+        Font = Enum.Font.GothamMedium,
+        Text = text or "",
+        TextSize = 13,
+        TextColor3 = theme.Text,
+        BackgroundColor3 = theme.Panel2,
+        Size = UDim2.new(1, 0, 0, height or 36),
+        Parent = parent,
+    })
+    addCorner(item, 6)
+    addStroke(item, theme.Stroke, 0.25)
+    return item
+end
+
+local function label(parent, theme, text, size, color)
+    return make("TextLabel", {
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        Text = tostring(text or ""),
+        TextColor3 = color or theme.Text,
+        TextSize = size or 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        Size = UDim2.new(1, 0, 1, 0),
+        Parent = parent,
+    })
+end
+
+local function component(tab, height)
+    local frame = make("Frame", {
+        BackgroundColor3 = tab.Theme.Panel,
+        Size = UDim2.new(1, 0, 0, height or 44),
+        Parent = tab.Page,
+    })
+    addCorner(frame, 6)
+    addStroke(frame, tab.Theme.Stroke, 0.35)
+    make("UIPadding", {
+        PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 7),
+        PaddingBottom = UDim.new(0, 7),
+        Parent = frame,
+    })
+    return frame
+end
+
+local function resizeCanvas(page)
+    local layout = page:FindFirstChildOfClass("UIListLayout")
+    if layout then
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 12)
+    end
+end
+
+local function watchPage(page)
+    local layout = make("UIListLayout", {
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = page,
+    })
+    make("UIPadding", {
+        PaddingLeft = UDim.new(0, 10),
+        PaddingRight = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 10),
+        PaddingBottom = UDim.new(0, 10),
+        Parent = page,
+    })
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        resizeCanvas(page)
+    end)
+end
+
+function Chilly:CreateWindow(options)
+    options = type(options) == "table" and options or {Name = tostring(options or self.Name)}
+    local theme = buildTheme(options.Theme or options.ThemeName or "Graphite")
+    local screen = make("ScreenGui", {
+        Name = options.Name or "Chilly",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = options.DisplayOrder or self.OverlayDisplayOrder,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        Parent = options.Parent or getParent(options.PreferPlayerGui),
+    })
+    raiseOverlay(screen, options.DisplayOrder or self.OverlayDisplayOrder)
+
+    local root = make("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Active = true,
+        Position = options.Position or UDim2.fromScale(0.5, 0.5),
+        Size = options.Size or UDim2.fromOffset(560, 390),
+        BackgroundColor3 = theme.Background,
+        Parent = screen,
+    })
+    addCorner(root, 8)
+    addStroke(root, theme.Stroke, 0.05)
+
+    local titleBar = make("Frame", {
+        BackgroundColor3 = theme.Panel,
+        Size = UDim2.new(1, 0, 0, 42),
+        Parent = root,
+    })
+    addCorner(titleBar, 8)
+
+    local title = make("TextLabel", {
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = options.Name or options.Title or self.Name,
+        TextColor3 = theme.Text,
+        TextSize = 15,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, -96, 1, 0),
+        Position = UDim2.fromOffset(14, 0),
+        Parent = titleBar,
+    })
+
+    local min = buttonLike(titleBar, theme, "-", 26)
+    min.Size = UDim2.fromOffset(28, 26)
+    min.Position = UDim2.new(1, -70, 0, 8)
+    local close = buttonLike(titleBar, theme, "x", 26)
+    close.Size = UDim2.fromOffset(28, 26)
+    close.Position = UDim2.new(1, -36, 0, 8)
+
+    local tabList = make("ScrollingFrame", {
+        BackgroundColor3 = theme.Panel,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 2,
+        CanvasSize = UDim2.new(),
+        Position = UDim2.fromOffset(10, 52),
+        Size = UDim2.new(0, 140, 1, -62),
+        Parent = root,
+    })
+    addCorner(tabList, 6)
+    watchPage(tabList)
+
+    local pages = make("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(160, 52),
+        Size = UDim2.new(1, -170, 1, -62),
+        Parent = root,
+    })
+
+    local window = setmetatable({
+        Chilly = self,
+        Screen = screen,
+        Root = root,
+        Title = title,
+        TabList = tabList,
+        Pages = pages,
+        Tabs = {},
+        Connections = {},
+        Theme = theme,
+        Flags = self.Flags,
+        Minimized = false,
+        Visible = true,
+        NormalSize = root.Size,
+        ConfigFolder = options.ConfigurationFolder or options.FolderName or "Chilly",
+        ConfigName = options.ConfigurationFile or options.ConfigName or options.Name or "config",
+    }, Window)
+    table.insert(self.Windows, window)
+
+    local dragging, dragStart, startPos
+    connect(window, titleBar.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = root.Position
+        end
+    end)
+    connect(window, UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    connect(window, UserInputService.InputChanged, function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    connect(window, UserInputService.InputBegan, function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == Chilly.ToggleUIKeybind then
+            window:SetVisibility(not window.Visible)
+        end
+    end)
+    connect(window, close.MouseButton1Click, function()
+        window:Destroy()
+    end)
+    connect(window, min.MouseButton1Click, function()
+        window:ToggleMaximize()
+    end)
+
+    if options.LoadingTitle or options.LoadingSubtitle then
+        self:Notify({
+            Title = options.LoadingTitle or options.Name or "Chilly",
+            Content = options.LoadingSubtitle or "Loaded",
+            Duration = 2,
+        })
+    end
+
+    return window
+end
+
+function Chilly:CreateLib(name, theme)
+    return self:CreateWindow({Name = name or self.Name, Theme = theme})
+end
+
+function Chilly:CreateProfessionalWindow(options)
+    return self:CreateWindow(options or {})
+end
+
+function Chilly:ApplyProfessionalDefaults(options)
+    options = options or {}
+    options.Theme = options.Theme or "Graphite"
+    options.Size = options.Size or UDim2.fromOffset(580, 410)
+    return options
+end
+
+function Window:GetConfigPath()
+    return tostring(self.ConfigFolder) .. "/" .. tostring(self.ConfigName) .. ".json"
+end
+
+function Window:SaveConfiguration()
+    local writefile = canUse("writefile")
+    local makefolder = canUse("makefolder")
+    local isfolder = canUse("isfolder")
+    if not writefile then
+        return false
+    end
+    if makefolder and (not isfolder or not isfolder(self.ConfigFolder)) then
+        pcall(makefolder, self.ConfigFolder)
+    end
+    pcall(writefile, self:GetConfigPath(), encode(self.Flags))
+    return true
+end
+
+function Window:LoadConfiguration()
+    local readfile = canUse("readfile")
+    local isfile = canUse("isfile")
+    if not readfile or (isfile and not isfile(self:GetConfigPath())) then
+        return false
+    end
+    for key, value in pairs(decode(readfile(self:GetConfigPath()))) do
+        self.Flags[key] = value
+    end
+    return true
+end
+
+function Window:SetVisibility(visible)
+    self.Visible = visible ~= false
+    self.Screen.Enabled = self.Visible
+end
+
+function Window:IsVisible()
+    return self.Visible
+end
+
+function Window:Hide()
+    self:SetVisibility(false)
+end
+
+function Window:Show()
+    self:SetVisibility(true)
+end
+
+function Window:ToggleMaximize()
+    self.Minimized = not self.Minimized
+    self.Pages.Visible = not self.Minimized
+    self.TabList.Visible = not self.Minimized
+    tween(self.Root, {Size = self.Minimized and UDim2.fromOffset(360, 42) or self.NormalSize}, 0.18)
+end
+
+function Window:SetTitle(text)
+    self.Title.Text = tostring(text or "")
+end
+
+function Window:Notify(options)
+    return self.Chilly:Notify(options)
+end
+
+function Window:Destroy()
+    for _, connection in ipairs(self.Connections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    self.Screen:Destroy()
+    local index = table.find(self.Chilly.Windows, self)
+    if index then
+        table.remove(self.Chilly.Windows, index)
+    end
+end
+
+function Window:ModifyTheme(theme)
+    self.Theme = buildTheme(theme)
+    return self.Theme
+end
+
+function Window:CreateTab(name, icon)
+    local tabButton = buttonLike(self.TabList, self.Theme, tostring(name or "Tab"), 34)
+    local page = make("ScrollingFrame", {
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        Size = UDim2.fromScale(1, 1),
+        CanvasSize = UDim2.new(),
+        Visible = false,
+        Parent = self.Pages,
+    })
+    watchPage(page)
+
+    local tab = setmetatable({
+        Window = self,
+        Name = tostring(name or "Tab"),
+        Icon = icon,
+        Button = tabButton,
+        Page = page,
+        Theme = self.Theme,
+        Flags = self.Flags,
+    }, Tab)
+    table.insert(self.Tabs, tab)
+
+    connect(self, tabButton.MouseButton1Click, function()
+        self:SelectTab(tab)
+    end)
+    if #self.Tabs == 1 then
+        self:SelectTab(tab)
+    end
+    return tab
+end
+
+function Window:NewTab(name, icon)
+    return self:CreateTab(name, icon)
+end
+
+function Window:SelectTab(tab)
+    for _, other in ipairs(self.Tabs) do
+        local active = other == tab
+        other.Page.Visible = active
+        tween(other.Button, {BackgroundColor3 = active and self.Theme.Accent or self.Theme.Panel2}, 0.12)
+    end
+    self.SelectedTab = tab
+end
+
+function Tab:ElementFrame(height)
+    return component(self, height)
+end
+
+function Tab:CreateSection(name)
+    local frame = make("TextLabel", {
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        Text = tostring(name or "Section"),
+        TextColor3 = self.Theme.Muted,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, 0, 0, 24),
+        Parent = self.Page,
+    })
+    local object = {Frame = frame}
+    function object:Set(text)
+        frame.Text = tostring(text or "")
+    end
+    return object
+end
+
+function Tab:NewSection(name)
+    return self:CreateSection(name)
+end
+
+function Tab:CreateDivider()
+    local frame = make("Frame", {
+        BackgroundColor3 = self.Theme.Stroke,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 1),
+        Parent = self.Page,
+    })
+    return {Frame = frame, Set = function(_, visible) frame.Visible = visible ~= false end}
+end
+
+function Tab:CreateLabel(text, icon, color)
+    local frame = component(self, 36)
+    local textLabel = label(frame, self.Theme, text, 13, color)
+    local object = {Frame = frame, Label = textLabel}
+    function object:Set(newText, _, newColor)
+        textLabel.Text = tostring(newText or "")
+        if newColor then
+            textLabel.TextColor3 = newColor
+        end
+    end
+    return object
+end
+
+function Tab:NewLabel(text, icon, color)
+    return self:CreateLabel(text, icon, color)
+end
+
+function Tab:CreateParagraph(options)
+    options = options or {}
+    local frame = component(self, options.Height or 70)
+    local title = label(frame, self.Theme, options.Title or options.Name or "Paragraph", 13)
+    title.Font = Enum.Font.GothamBold
+    title.Size = UDim2.new(1, 0, 0, 20)
+    local content = label(frame, self.Theme, options.Content or options.Text or "", 12, self.Theme.Muted)
+    content.TextWrapped = true
+    content.TextYAlignment = Enum.TextYAlignment.Top
+    content.Position = UDim2.fromOffset(0, 24)
+    content.Size = UDim2.new(1, 0, 1, -24)
+    local object = {Frame = frame, Title = title, Content = content}
+    function object:Set(newOptions)
+        if type(newOptions) == "table" then
+            title.Text = tostring(newOptions.Title or newOptions.Name or title.Text)
+            content.Text = tostring(newOptions.Content or newOptions.Text or content.Text)
+        else
+            content.Text = tostring(newOptions or "")
+        end
+    end
+    return object
+end
+
+function Tab:CreateCard(options)
+    return self:CreateParagraph(options)
+end
+
+function Tab:CreateButton(options)
+    options = type(options) == "table" and options or {Name = tostring(options or "Button")}
+    local button = buttonLike(self.Page, self.Theme, options.Name or "Button", options.Height or 38)
+    connect(self.Window, button.MouseButton1Click, function()
+        tween(button, {BackgroundColor3 = self.Theme.Accent}, 0.08)
+        task.delay(0.1, function()
+            if button.Parent then
+                tween(button, {BackgroundColor3 = self.Theme.Panel2}, 0.12)
+            end
+        end)
+        call(options.Callback)
+    end)
+    local object = {Button = button}
+    function object:Set(text)
+        button.Text = tostring(text or "")
+    end
+    return object
+end
+
+function Tab:NewButton(name, info, callback)
+    return self:CreateButton({Name = name, Callback = callback})
+end
+
+function Tab:CreateToggle(options)
+    options = options or {}
+    local frame = component(self, 42)
+    local text = label(frame, self.Theme, options.Name or "Toggle")
+    text.Size = UDim2.new(1, -58, 1, 0)
+    local switch = make("TextButton", {
+        AutoButtonColor = false,
+        Text = "",
+        BackgroundColor3 = self.Theme.Panel2,
+        Position = UDim2.new(1, -46, 0.5, -10),
+        Size = UDim2.fromOffset(42, 20),
+        Parent = frame,
+    })
+    addCorner(switch, 10)
+    local knob = make("Frame", {
+        BackgroundColor3 = self.Theme.Muted,
+        Position = UDim2.fromOffset(2, 2),
+        Size = UDim2.fromOffset(16, 16),
+        Parent = switch,
+    })
+    addCorner(knob, 8)
+
+    local object = {Frame = frame, CurrentValue = false, Value = false}
+    local function paint(value)
+        tween(switch, {BackgroundColor3 = value and self.Theme.Accent or self.Theme.Panel2}, 0.12)
+        tween(knob, {Position = value and UDim2.fromOffset(24, 2) or UDim2.fromOffset(2, 2)}, 0.12)
+    end
+    function object:Set(value, callCallback)
+        self.CurrentValue = value == true
+        self.Value = self.CurrentValue
+        if options.Flag then
+            Chilly.Flags[options.Flag] = self.CurrentValue
+        end
+        paint(self.CurrentValue)
+        if callCallback ~= false then
+            call(options.Callback, self.CurrentValue)
+        end
+    end
+    connect(self.Window, switch.MouseButton1Click, function()
+        object:Set(not object.CurrentValue)
+    end)
+    object:Set(options.CurrentValue or options.Default or false, false)
+    return object
+end
+
+function Tab:NewToggle(name, info, default, callback)
+    return self:CreateToggle({Name = name, CurrentValue = default, Callback = callback})
+end
+
+function Tab:CreateSlider(options)
+    options = options or {}
+    local min = (options.Range and options.Range[1]) or options.Min or 0
+    local max = (options.Range and options.Range[2]) or options.Max or 100
+    local step = options.Increment or options.Step or 1
+    local frame = component(self, 58)
+    local name = label(frame, self.Theme, options.Name or "Slider")
+    name.Size = UDim2.new(1, -74, 0, 22)
+    local valueText = label(frame, self.Theme, "", 12, self.Theme.Muted)
+    valueText.TextXAlignment = Enum.TextXAlignment.Right
+    valueText.Position = UDim2.new(1, -76, 0, 0)
+    valueText.Size = UDim2.fromOffset(76, 22)
+    local bar = make("Frame", {
+        BackgroundColor3 = self.Theme.Panel2,
+        Position = UDim2.new(0, 0, 1, -18),
+        Size = UDim2.new(1, 0, 0, 8),
+        Parent = frame,
+    })
+    addCorner(bar, 4)
+    local fill = make("Frame", {
+        BackgroundColor3 = self.Theme.Accent,
+        Size = UDim2.new(0, 0, 1, 0),
+        Parent = bar,
+    })
+    addCorner(fill, 4)
+
+    local object = {Frame = frame, CurrentValue = min}
+    local dragging = false
+    local function setFromX(x)
+        local pct = math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+        object:Set(min + (max - min) * pct)
+    end
+    function object:Set(value, callCallback)
+        value = clampStep(value, min, max, step)
+        self.CurrentValue = value
+        if options.Flag then
+            Chilly.Flags[options.Flag] = value
+        end
+        local pct = (value - min) / math.max(max - min, 1)
+        fill.Size = UDim2.new(pct, 0, 1, 0)
+        valueText.Text = tostring(value) .. tostring(options.Suffix or "")
+        if callCallback ~= false then
+            call(options.Callback, value)
+        end
+    end
+    connect(self.Window, bar.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            setFromX(input.Position.X)
+        end
+    end)
+    connect(self.Window, UserInputService.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    connect(self.Window, UserInputService.InputChanged, function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            setFromX(input.Position.X)
+        end
+    end)
+    object:Set(options.CurrentValue or options.Default or min, false)
+    return object
+end
+
+function Tab:NewSlider(name, min, max, default, callback)
+    return self:CreateSlider({Name = name, Range = {min, max}, CurrentValue = default, Callback = callback})
+end
+
+function Tab:CreateInput(options)
+    options = options or {}
+    local frame = component(self, 46)
+    local text = label(frame, self.Theme, options.Name or "Input")
+    text.Size = UDim2.new(0.4, 0, 1, 0)
+    local box = make("TextBox", {
+        ClearTextOnFocus = false,
+        Font = Enum.Font.Gotham,
+        PlaceholderText = options.PlaceholderText or options.Placeholder or "",
+        Text = tostring(options.CurrentValue or options.Default or ""),
+        TextColor3 = self.Theme.Text,
+        PlaceholderColor3 = self.Theme.Muted,
+        TextSize = 12,
+        BackgroundColor3 = self.Theme.Panel2,
+        Position = UDim2.new(0.42, 0, 0.5, -15),
+        Size = UDim2.new(0.58, 0, 0, 30),
+        Parent = frame,
+    })
+    addCorner(box, 5)
+    local object = {Frame = frame, Box = box, CurrentValue = box.Text}
+    function object:Set(value, callCallback)
+        self.CurrentValue = tostring(value or "")
+        box.Text = self.CurrentValue
+        if options.Flag then
+            Chilly.Flags[options.Flag] = self.CurrentValue
+        end
+        if callCallback ~= false then
+            call(options.Callback, self.CurrentValue)
+        end
+    end
+    connect(self.Window, box.FocusLost, function(enterPressed)
+        if options.CallbackOnEnterOnly and not enterPressed then
+            object:Set(box.Text, false)
+            return
+        end
+        if options.RemoveTextAfterFocusLost then
+            object:Set("")
+        else
+            object:Set(box.Text)
+        end
+    end)
+    return object
+end
+
+function Tab:CreateTextbox(options)
+    return self:CreateInput(options)
+end
+
+function Tab:NewTextBox(name, placeholder, callback)
+    return self:CreateInput({Name = name, PlaceholderText = placeholder, Callback = callback})
+end
+
+function Tab:CreateDropdown(options)
+    options = options or {}
+    local frame = component(self, 44)
+    local choices = asTextList(options.Options or options.Values or {})
+    local multi = options.MultipleOptions or options.Multi
+    local selected = multi and {} or tostring(options.CurrentOption or options.CurrentValue or choices[1] or "")
+    local button = buttonLike(frame, self.Theme, "", 30)
+    button.Size = UDim2.new(1, 0, 0, 30)
+    button.Position = UDim2.fromOffset(0, 0)
+    local list = make("Frame", {
+        BackgroundColor3 = self.Theme.Panel2,
+        Visible = false,
+        Position = UDim2.new(0, 0, 1, 4),
+        Size = UDim2.new(1, 0, 0, math.min(#choices, 5) * 30),
+        ZIndex = 5,
+        Parent = frame,
+    })
+    addCorner(list, 6)
+    make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Parent = list})
+
+    local object = {Frame = frame, Button = button, Options = choices, CurrentOption = selected}
+    local function textForSelection()
+        return options.Name and (options.Name .. ": " .. (multi and table.concat(selected, ", ") or tostring(selected))) or tostring(multi and table.concat(selected, ", ") or selected)
+    end
+    local function rebuild()
+        list:ClearAllChildren()
+        make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Parent = list})
+        list.Size = UDim2.new(1, 0, 0, math.min(#object.Options, 5) * 30)
+        for _, choice in ipairs(object.Options) do
+            local row = buttonLike(list, self.Theme, choice, 30)
+            row.ZIndex = 6
+            connect(self.Window, row.MouseButton1Click, function()
+                object:Set(choice)
+                if not multi then
+                    list.Visible = false
+                    frame.Size = UDim2.new(1, 0, 0, 44)
+                end
+            end)
+        end
+    end
+    function object:Set(value)
+        if multi then
+            local index = table.find(selected, tostring(value))
+            if index then
+                table.remove(selected, index)
+            else
+                table.insert(selected, tostring(value))
+            end
+        else
+            selected = tostring(value or "")
+        end
+        self.CurrentOption = selected
+        button.Text = textForSelection()
+        if options.Flag then
+            Chilly.Flags[options.Flag] = selected
+        end
+        call(options.Callback, selected)
+    end
+    function object:Refresh(newOptions, keepCurrent)
+        self.Options = asTextList(newOptions or {})
+        if not keepCurrent then
+            selected = multi and {} or (self.Options[1] or "")
+        end
+        rebuild()
+        button.Text = textForSelection()
+    end
+    connect(self.Window, button.MouseButton1Click, function()
+        list.Visible = not list.Visible
+        frame.Size = list.Visible and UDim2.new(1, 0, 0, 50 + list.Size.Y.Offset) or UDim2.new(1, 0, 0, 44)
+        resizeCanvas(self.Page)
+    end)
+    rebuild()
+    button.Text = textForSelection()
+    return object
+end
+
+function Tab:NewDropdown(name, options, callback)
+    return self:CreateDropdown({Name = name, Options = options, Callback = callback})
+end
+
+local function parseColor(text, fallback)
+    local r, g, b = tostring(text):match("(%d+)%D+(%d+)%D+(%d+)")
+    if r and g and b then
+        return Color3.fromRGB(math.clamp(tonumber(r), 0, 255), math.clamp(tonumber(g), 0, 255), math.clamp(tonumber(b), 0, 255))
+    end
+    return fallback
+end
+
+function Tab:CreateColorPicker(options)
+    options = options or {}
+    local color = options.Color or Color3.fromRGB(255, 255, 255)
+    local input = self:CreateInput({
+        Name = options.Name or "Color",
+        CurrentValue = string.format("%d,%d,%d", color.R * 255, color.G * 255, color.B * 255),
+        Callback = function(text)
+            color = parseColor(text, color)
+            call(options.Callback, color)
+        end,
+    })
+    input.Color = color
+    function input:Set(newColor)
+        color = newColor or color
+        self.Color = color
+        self.Box.Text = string.format("%d,%d,%d", color.R * 255, color.G * 255, color.B * 255)
+        call(options.Callback, color)
+    end
+    return input
+end
+
+function Tab:NewColorPicker(name, default, callback)
+    return self:CreateColorPicker({Name = name, Color = default, Callback = callback})
+end
+
+function Tab:CreateKeybind(options)
+    options = options or {}
+    local key = normalizeKey(options.CurrentKeybind or options.CurrentKey or options.Key or Enum.KeyCode.RightControl)
+    local button = self:CreateButton({Name = (options.Name or "Keybind") .. ": " .. key.Name})
+    local waiting = false
+    function button:Set(newKey)
+        key = normalizeKey(newKey)
+        self.Button.Text = (options.Name or "Keybind") .. ": " .. key.Name
+        if options.Flag then
+            Chilly.Flags[options.Flag] = key.Name
+        end
+    end
+    connect(self.Window, button.Button.MouseButton1Click, function()
+        waiting = true
+        button.Button.Text = "Press a key..."
+    end)
+    connect(self.Window, UserInputService.InputBegan, function(input, gameProcessed)
+        if gameProcessed then
+            return
+        end
+        local pressed = input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode or input.UserInputType
+        if waiting then
+            waiting = false
+            button:Set(pressed)
+            return
+        end
+        if pressed == key then
+            call(options.Callback, key)
+        end
+    end)
+    button.CurrentKeybind = key
+    return button
+end
+
+function Tab:CreateBind(options)
+    return self:CreateKeybind(options)
+end
+
+function Tab:NewKeybind(name, default, callback)
+    return self:CreateKeybind({Name = name, CurrentKeybind = default, Callback = callback})
+end
+
+function Tab:CreateSpacer(height)
+    local frame = make("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, height or 10),
+        Parent = self.Page,
+    })
+    return {Frame = frame, Set = function(_, value) frame.Size = UDim2.new(1, 0, 0, value or 10) end}
+end
+
+function Tab:CreateProgress(options)
+    options = options or {}
+    local slider = self:CreateSlider({
+        Name = options.Name or "Progress",
+        Range = options.Range or {0, 100},
+        CurrentValue = options.CurrentValue or options.Value or 0,
+        Increment = options.Increment or 1,
+        Suffix = options.Suffix or "%",
+        Callback = options.Callback,
+        Flag = options.Flag,
+    })
+    return slider
+end
+
+function Tab:CreateActionRow(options)
+    options = options or {}
+    local frame = component(self, 42)
+    make("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = frame,
+    })
+    local object = {Frame = frame, Buttons = {}}
+    for _, action in ipairs(options.Actions or {}) do
+        local button = buttonLike(frame, self.Theme, action.Name or action.Title or "Action", 28)
+        button.Size = UDim2.new(1 / math.max(#options.Actions, 1), -4, 0, 28)
+        table.insert(object.Buttons, button)
+        connect(self.Window, button.MouseButton1Click, function()
+            call(action.Callback)
+        end)
+    end
+    return object
+end
+
+function Tab:CreateCode(options)
+    options = options or {}
+    local frame = component(self, options.Height or 132)
+    local box = make("TextBox", {
+        ClearTextOnFocus = false,
+        MultiLine = true,
+        Font = Enum.Font.Code,
+        Text = tostring(options.Code or options.Text or options.Content or ""),
+        TextColor3 = self.Theme.Text,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        BackgroundColor3 = self.Theme.Panel2,
+        Size = UDim2.fromScale(1, 1),
+        Parent = frame,
+    })
+    addCorner(box, 5)
+    local object = {Frame = frame, Box = box}
+    function object:Set(text)
+        box.Text = tostring(text or "")
+    end
+    function object:Get()
+        return box.Text
+    end
+    return object
+end
+
+function Tab:CreateHeader(options)
+    options = options or {}
+    return self:CreateParagraph({Title = options.Title or options.Name or "Header", Content = options.Subtitle or options.Content or ""})
+end
+
+function Tab:CreateNotice(options)
+    options = options or {}
+    local colors = {info = self.Theme.Accent, success = self.Theme.Success, warning = self.Theme.Warning, danger = self.Theme.Danger}
+    return self:CreateLabel(options.Title or options.Name or "Notice", nil, colors[string.lower(options.Level or "info")])
+end
+
+function Tab:CreateStat(options)
+    return self:CreateProgress(options)
+end
+
+function Tab:CreateStepper(options)
+    options = options or {}
+    local inc = options.Increment or 1
+    local slider = self:CreateSlider(options)
+    self:CreateActionRow({
+        Actions = {
+            {Name = "-", Callback = function() slider:Set((slider.CurrentValue or 0) - inc) end},
+            {Name = "+", Callback = function() slider:Set((slider.CurrentValue or 0) + inc) end},
+        },
+    })
+    return slider
+end
+
+function Tab:CreateSegmentedControl(options)
+    return self:CreateDropdown(options)
+end
+
+function Tab:CreateQuickActions(options)
+    return self:CreateActionRow(options)
+end
+
+function Tab:CreateMiniConsole(options)
+    local console = self:CreateCode(options)
+    function console:Append(line)
+        self.Box.Text = self.Box.Text .. "\n" .. tostring(line)
+    end
+    function console:Clear()
+        self.Box.Text = ""
+    end
+    return console
+end
+
+function Tab:CreateThemePreview(options)
+    options = options or {}
+    local themeName = options.Theme or "Graphite"
+    local theme = Chilly.Themes[themeName] or Chilly:CreateTheme(themeName)
+    return self:CreateParagraph({
+        Title = options.Name or "Theme: " .. themeName,
+        Content = string.format("Accent RGB %.0f %.0f %.0f", theme.Accent.R * 255, theme.Accent.G * 255, theme.Accent.B * 255),
+    })
+end
+
+function Chilly:SetFlag(flag, value)
+    self.Flags[flag] = value
+end
+
+function Chilly:GetFlag(flag)
+    return self.Flags[flag]
+end
+
+function Chilly:SetVisibility(visible)
+    for _, window in ipairs(self.Windows) do
+        window:SetVisibility(visible)
+    end
+end
+
+function Chilly:IsVisible()
+    return self.Windows[1] and self.Windows[1]:IsVisible() or false
+end
+
+function Chilly:Destroy()
+    for _, window in ipairs(table.clone(self.Windows)) do
+        window:Destroy()
+    end
+    self.Windows = {}
+end
+
+function Chilly:Notify(options)
+    options = type(options) == "table" and options or {Title = tostring(options or "Notice")}
+    local gui = make("ScreenGui", {
+        Name = "ChillyNotify",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = Chilly.OverlayDisplayOrder,
+        Parent = getParent(),
+    })
+    raiseOverlay(gui, Chilly.OverlayDisplayOrder)
+    local theme = buildTheme(options.Theme or "Graphite")
+    local box = make("Frame", {
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -18, 0, 18),
+        Size = UDim2.fromOffset(280, options.Content and 78 or 50),
+        BackgroundColor3 = theme.Panel,
+        Parent = gui,
+    })
+    addCorner(box, 8)
+    addStroke(box, theme.Stroke, 0.15)
+    make("UIPadding", {
+        PaddingLeft = UDim.new(0, 12),
+        PaddingRight = UDim.new(0, 12),
+        PaddingTop = UDim.new(0, 8),
+        PaddingBottom = UDim.new(0, 8),
+        Parent = box,
+    })
+    local title = label(box, theme, options.Title or options.Name or "Chilly", 13)
+    title.Font = Enum.Font.GothamBold
+    title.Size = UDim2.new(1, 0, 0, 20)
+    if options.Content or options.Description then
+        local content = label(box, theme, options.Content or options.Description, 12, theme.Muted)
+        content.TextWrapped = true
+        content.Position = UDim2.fromOffset(0, 24)
+        content.Size = UDim2.new(1, 0, 1, -24)
+    end
+    task.delay(options.Duration or 4, function()
+        if gui.Parent then
+            gui:Destroy()
+        end
+    end)
+    return gui
+end
+
+function Chilly:SaveConfiguration()
+    return self.Windows[1] and self.Windows[1]:SaveConfiguration() or false
+end
+
+function Chilly:LoadConfiguration()
+    return self.Windows[1] and self.Windows[1]:LoadConfiguration() or false
+end
+
+function Chilly:LoadAssets()
+    return self
+end
+
+function Chilly:LoadLucide()
+    return self
+end
+
+function Chilly:RegisterIcons(icons)
+    for key, value in pairs(icons or {}) do
+        self.IconCatalog[key] = value
+    end
+end
+
+function Chilly:GetIcon(name, fallback)
+    return self.IconCatalog[name] or fallback or name
+end
+
+function Chilly:InstallRayfieldAlias()
+    pcall(function()
+        _G.Rayfield = self
+    end)
+    pcall(function()
+        if typeof(getgenv) == "function" then
+            getgenv().Rayfield = self
+        end
+    end)
+    return self
+end
+
+function Chilly:Start(options)
+    if #self.Windows > 0 then
+        self.Windows[1]:Show()
+        return self.Windows[1]
+    end
+    local window = self:CreateWindow(options or {Name = self.Name})
+    window:CreateTab("Main"):CreateLabel("Chilly UI loaded")
+    return window
+end
+
+Chilly:InstallRayfieldAlias()
+Chilly:Start()
+
+return Chilly
