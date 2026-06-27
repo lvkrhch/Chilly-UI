@@ -333,6 +333,7 @@ function Chilly:CreateWindow(options)
     addStroke(root, theme.Stroke, 0.05)
 
     local titleBar = make("Frame", {
+        Active = true,
         BackgroundColor3 = theme.Panel,
         Size = UDim2.new(1, 0, 0, 42),
         Parent = root,
@@ -359,6 +360,7 @@ function Chilly:CreateWindow(options)
     close.Position = UDim2.new(1, -36, 0, 8)
 
     local tabList = make("ScrollingFrame", {
+        Active = true,
         BackgroundColor3 = theme.Panel,
         BorderSizePixel = 0,
         ScrollBarThickness = 2,
@@ -371,6 +373,7 @@ function Chilly:CreateWindow(options)
     watchPage(tabList)
 
     local pages = make("Frame", {
+        Active = true,
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(160, 52),
         Size = UDim2.new(1, -170, 1, -62),
@@ -396,30 +399,21 @@ function Chilly:CreateWindow(options)
     }, Window)
     table.insert(self.Windows, window)
 
-    local function shouldDrag(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return false
-        end
-
-        local guiObjects = UserInputService:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
-        for _, guiObject in ipairs(guiObjects) do
-            if guiObject:IsDescendantOf(root) then
-                return not guiObject:IsA("TextButton") and not guiObject:IsA("TextBox")
-            end
-        end
-
-        return true
-    end
-
     local dragging, dragStart, startPos
-    connect(window, root.InputBegan, function(input)
-        if shouldDrag(input) then
+    local function startDrag(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = root.Position
         end
-    end)
+    end
+    window.StartDrag = startDrag
+
+    connect(window, root.InputBegan, startDrag)
+    connect(window, titleBar.InputBegan, startDrag)
+    connect(window, tabList.InputBegan, startDrag)
+    connect(window, pages.InputBegan, startDrag)
     connect(window, UserInputService.InputEnded, function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
@@ -554,6 +548,7 @@ end
 function Window:CreateTab(name, icon)
     local tabButton = buttonLike(self.TabList, self.Theme, tostring(name or "Tab"), 34)
     local page = make("ScrollingFrame", {
+        Active = true,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ScrollBarThickness = 3,
@@ -578,6 +573,9 @@ function Window:CreateTab(name, icon)
     connect(self, tabButton.MouseButton1Click, function()
         self:SelectTab(tab)
     end)
+    if self.StartDrag then
+        connect(self, page.InputBegan, self.StartDrag)
+    end
     if #self.Tabs == 1 then
         self:SelectTab(tab)
     end
