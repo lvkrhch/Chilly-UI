@@ -396,21 +396,39 @@ function Chilly:CreateWindow(options)
     }, Window)
     table.insert(self.Windows, window)
 
+    local function shouldDrag(input)
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
+            and input.UserInputType ~= Enum.UserInputType.Touch then
+            return false
+        end
+
+        local guiObjects = UserInputService:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+        for _, guiObject in ipairs(guiObjects) do
+            if guiObject:IsDescendantOf(root) then
+                return not guiObject:IsA("TextButton") and not guiObject:IsA("TextBox")
+            end
+        end
+
+        return true
+    end
+
     local dragging, dragStart, startPos
-    connect(window, titleBar.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    connect(window, root.InputBegan, function(input)
+        if shouldDrag(input) then
             dragging = true
             dragStart = input.Position
             startPos = root.Position
         end
     end)
     connect(window, UserInputService.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
     connect(window, UserInputService.InputChanged, function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - dragStart
             root.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
